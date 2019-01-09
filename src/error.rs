@@ -5,17 +5,17 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
-  AmbiguousBus(usize),
-  AmbiguousRead(Vec<String>),
-  AmbiguousWrite(Vec<String>),
+  InvalidRead(String),
+  BusConflict(Vec<String>),
+  UpdateConflict(Vec<String>),
 }
 
 impl StdError for Error {
   fn description(&self) -> &str {
     match self {
-      Error::AmbiguousBus(_) => "Bus read resulted in ambiguous value.",
-      Error::AmbiguousRead(_) => "Attempted to read value from multiple locations.",
-      Error::AmbiguousWrite(_) => "Attempted to write value from multiple locations.",
+      Error::InvalidRead(_) => "Bus read resulted in invalid value.",
+      Error::BusConflict(_) => "Attempted to write multiple devices to bus.",
+      Error::UpdateConflict(_) => "Attempted to write multiple sources to device.",
     }
   }
 }
@@ -23,9 +23,9 @@ impl StdError for Error {
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      Error::AmbiguousBus(count) => write!(f, "Unable to read bus, value would be ambiguous due to {} drivers.", count),
-      Error::AmbiguousRead(sources) => write!(f, "Attempted to read value from multiple locations: {:?}.", sources),
-      Error::AmbiguousWrite(sources) => write!(f, "Attempted to write value from multiple locations: {:?}.", sources),
+      Error::InvalidRead(bus) => write!(f, "Unable to read from bus {}, value is invalid.", bus),
+      Error::BusConflict(sources) => write!(f, "Unable to write multiple devices to bus: {:?}.", sources),
+      Error::UpdateConflict(sources) => write!(f, "Unable to update device from multiple sources: {:?}.", sources),
     }
   }
 }

@@ -1,34 +1,40 @@
 
-use std::cell::RefCell;
-
 use crate::error::Error;
-use crate::connection::Connection;
+use crate::control;
 
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Bus {
-  connections: RefCell<Vec<Connection>>,
+pub struct State {
+  pub data: Option<u8>,
+  pub addr: Option<u16>,
 }
 
-impl Bus {
-  pub fn new() -> Bus {
-    Bus {
-      connections: RefCell::new(Vec::new()),
+impl State {
+  pub fn read_data(&self) -> Result<u8, Error> {
+    match self.data {
+      Some(value) => Ok(value),
+      None => Err(Error::InvalidRead(String::from("data"))),
     }
   }
 
-  pub fn connect(&self, connection: Connection) {
-    self.connections.borrow_mut().push(connection);
+  pub fn read_addr(&self) -> Result<u16, Error> {
+    match self.addr {
+      Some(value) => Ok(value),
+      None => Err(Error::InvalidRead(String::from("addr"))),
+    }
   }
 
-  pub fn read(&self) -> Result<u8, Error> {
-    let results: Result<Vec<Option<u8>>, Error> = self.connections.borrow().iter().map(|c| c.read()).collect();
-    let values: Vec<u8> = results?.iter().cloned().filter_map(|c| c).collect();
-    if values.len() != 1 {
-      Err(Error::AmbiguousBus(values.len()))
-    } else {
-      Ok(values[0])
-    }
+  pub fn data(&self) -> Option<u8> {
+    self.data
+  }
+
+  pub fn addr(&self) -> Option<u16> {
+    self.addr
   }
 }
 
+pub trait Device<T: control::Trait> {
+  fn update(&mut self, control: T) -> Result<(), Error>;
+  fn read(&self) -> State;
+  fn clk(&mut self, state: &State) -> Result<(), Error>;
+}

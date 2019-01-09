@@ -1,96 +1,72 @@
 
-use std::rc::Rc;
-
+use crate::bus;
+use crate::control;
 use crate::error::Error;
-use crate::clock::Clock;
-use crate::bus::Bus;
-use crate::addr::{AddrBus, AddrByte};
-use crate::connection::Connection;
-use crate::mux::Mux;
-use crate::input::Input;
-use crate::register::{Register, Control as RegisterControl};
-use crate::program_counter::{ProgramCounter, Control as PCControl};
-use crate::ram::{Ram, Control as RamControl};
+
+use crate::register::Register;
+use crate::program_counter::ProgramCounter;
+use crate::memory::Memory;
 
 
 #[derive(Debug)]
 pub struct Cpu {
-	addr: Rc<AddrBus>,
-	data: Rc<Bus>,
+  pub pc: ProgramCounter,
 
-	i_mux: Rc<Mux>,
-	i: Rc<Bus>,
-	r: Rc<Bus>,
+  pub a: Register,
+  pub b: Register,
+  pub x: Register,
+  pub y: Register,
 
-	pc: Rc<ProgramCounter>,
-
-	a: Rc<Register>,
-	b: Rc<Register>,
-	x: Rc<Register>,
-	y: Rc<Register>,
-
-	ram: Rc<Ram>,
+  pub memory: Memory,
 }
 
 impl Cpu {
-	pub fn new() -> Cpu {
-		let addr = Rc::new(AddrBus::new());
-		let data = Rc::new(Bus::new());
-		let r = Rc::new(Bus::new());
-		let i = Rc::new(Bus::new());
+  pub fn new() -> Cpu {
+    Cpu {
+      pc: ProgramCounter::new(),
 
-		let pc = Rc::new(ProgramCounter::new(Rc::clone(&data)));
-		addr.connect((
-			Connection::ProgramCounter(Rc::clone(&pc), PCControl::WriteA(Some(AddrByte::High))),
-			Connection::ProgramCounter(Rc::clone(&pc), PCControl::WriteA(Some(AddrByte::Low)))
-		));
-		data.connect(Connection::ProgramCounter(Rc::clone(&pc), PCControl::WriteD(AddrByte::High)));
-		data.connect(Connection::ProgramCounter(Rc::clone(&pc), PCControl::WriteD(AddrByte::Low)));
+      a: Register::new(),
+      b: Register::new(),
+      x: Register::new(),
+      y: Register::new(),
 
-		let i_mux = Rc::new(Mux::new(vec![Rc::clone(&r), Rc::clone(&data)]));
-		i.connect(Connection::Mux(Rc::clone(&i_mux)));
+      memory: Memory::new(),
+    }
+  }
 
-		let a = Rc::new(Register::new(Rc::clone(&i)));
-		let b = Rc::new(Register::new(Rc::clone(&i)));
-		let x = Rc::new(Register::new(Rc::clone(&i)));
-		let y = Rc::new(Register::new(Rc::clone(&i)));
-		r.connect(Connection::Register(Rc::clone(&a), RegisterControl::WriteR));
-		r.connect(Connection::Register(Rc::clone(&b), RegisterControl::WriteR));
-		r.connect(Connection::Register(Rc::clone(&x), RegisterControl::WriteR));
-		r.connect(Connection::Register(Rc::clone(&y), RegisterControl::WriteR));
-		data.connect(Connection::Register(Rc::clone(&a), RegisterControl::WriteD));
-		data.connect(Connection::Register(Rc::clone(&b), RegisterControl::WriteD));
-		data.connect(Connection::Register(Rc::clone(&x), RegisterControl::WriteD));
-		data.connect(Connection::Register(Rc::clone(&y), RegisterControl::WriteD));
+  fn merge_states(&self, states: Vec<bus::State>) -> Result<bus::State, Error> {
+    let state = bus::State { data: None, addr: None };
+    for let s in states.iter() {
+      if let Some(_) = s.data {
+        if let None = state.data {
+          state.data = s.data;
+        } else {
+          // TODO ERROR
+        }
+      }
+      if let Some(_) = s.addr {
+        if let None = state.addr {
+          state.addr = s.addr;
+        } else {
+          // TODO ERROR
+        }
+      }
+    }
+    Ok(state)
+  }
 
-		let ram = Rc::new(Ram::new(Rc::clone(&addr), Rc::clone(&data)));
-		data.connect(Connection::Ram(Rc::clone(&ram)));
-
-		Cpu {
-			addr: addr,
-			data: data,
-
-			pc: pc,
-
-			i_mux: i_mux,
-			i: i,
-			r: r,
-
-			a: a,
-			b: b,
-			x: x,
-			y: y,
-
-			ram: ram,
-		}
-	}
-
-	pub fn clock(&self) -> Result<(), Error> {
-		self.pc.clock()?;
-		self.a.clock()?;
-		self.b.clock()?;
-		self.x.clock()?;
-		self.y.clock()?;
-		Ok(())
-	}
+  pub fn bus_state(&self) -> Result<bus::State, Error> {
+    let state = self.merge_states(vec![
+      self.pc.read(),
+    ])?;
+    self.memory.set_addr(&state);
+    self.merge_states(vec![
+      state,
+      self.a.read(),
+      self.b.read(),
+      self.x.read(),
+      self.y.read(),
+      self.memory.read(),
+    ])
+  }
 }
