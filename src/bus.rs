@@ -1,4 +1,6 @@
 
+use std::containers::HashMap;
+
 use crate::error::Error;
 use crate::control;
 
@@ -22,14 +24,6 @@ impl State {
       Some(value) => Ok(value),
       None => Err(Error::InvalidRead(String::from("addr"))),
     }
-  }
-
-  pub fn data(&self) -> Option<u8> {
-    self.data
-  }
-
-  pub fn addr(&self) -> Option<u16> {
-    self.addr
   }
 }
 

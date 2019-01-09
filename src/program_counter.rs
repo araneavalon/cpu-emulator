@@ -6,6 +6,9 @@ use crate::control;
 use crate::error::Error;
 
 
+fn to_bytes(value: u16) -> [u8; 2] {
+  [(value >> 8) as u8, value as u8]
+}
 fn from_bytes(value: &[u8; 2]) -> u16 {
   ((value[0] << 8) as u16) | (value[1] as u16)
 }
@@ -37,6 +40,21 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
         String::from("ProgramCounter:H"),
         String::from("ProgramCounter:L"),
       ]))
+    } else if Addr == ReadWrite::Read && DataH == ReadWrite::Read {
+      Err(Error::UpdateConflict(vec![
+        String::from("ProgramCounter:HL"),
+        String::from("ProgramCounter:H"),
+      ]))
+    } else if Addr == ReadWrite::Read && DataL == ReadWrite::Read {
+      Err(Error::UpdateConflict(vec![
+        String::from("ProgramCounter:HL"),
+        String::from("ProgramCounter:L"),
+      ]))
+    } else if Addr == ReadWrite::Read && Count != CountControl::None {
+      Err(Error::UpdateConflict(vec![
+        String::from("ProgramCounter:HL"),
+        String::from("ProgramCounter:Count"),
+      ]))
     } else if DataH == ReadWrite::Read && Count != CountControl::None {
       Err(Error::UpdateConflict(vec![
         String::from("ProgramCounter:H"),
@@ -67,7 +85,7 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
       } else {
         None
       },
-      addr: if let control::Write::Write = self.control.Addr {
+      addr: if let control::ReadWrite::Write = self.control.Addr {
         Some(from_bytes(&self.value))
       } else {
         None
@@ -83,6 +101,9 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
     }
     if let control::ReadWrite::Read = self.control.DataL {
       self.value[1] = state.read_data()?;
+    }
+    if let control::ReadWrite::Read = self.control.Addr {
+      self.value = to_bytes(state.read_addr()?);
     }
 
     match self.control.Count {
