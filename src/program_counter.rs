@@ -1,17 +1,10 @@
 
 use std::fmt;
 
+use crate::math::*;
 use crate::bus;
 use crate::control;
 use crate::error::Error;
-
-
-fn to_bytes(value: u16) -> [u8; 2] {
-  [(value >> 8) as u8, value as u8]
-}
-fn from_bytes(value: &[u8; 2]) -> u16 {
-  ((value[0] << 8) as u16) | (value[1] as u16)
-}
 
 #[derive(PartialEq, Eq)]
 pub struct ProgramCounter {
@@ -72,6 +65,36 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
         DataH: DataH,
         Addr: Addr,
       };
+
+      match self.control.Count {
+        CountControl::Increment => {
+          if self.value[1] == 0xFF {
+            if self.value[0] == 0xFF {
+              self.value = [0x00, 0x00];
+            } else {
+              self.value = [self.value[0] + 1, 0x00];
+            }
+          } else {
+            self.value[1] += 1;
+          }
+        },
+        CountControl::Carry => {
+          if self.value[0] == 0xFF {
+            self.value[0] = 0x00;
+          } else {
+            self.value[0] += 1;
+          }
+        },
+        CountControl::Borrow => {
+          if self.value[0] == 0x00 {
+            self.value[0] = 0xFF;
+          } else {
+            self.value[0] -= 1;
+          }
+        },
+        CountControl::None => (),
+      }
+
       Ok(())
     }
   }
@@ -86,7 +109,7 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
         None
       },
       addr: if let control::ReadWrite::Write = self.control.Addr {
-        Some(from_bytes(&self.value))
+        Some(bus::Addr::Full(from_bytes(&self.value)))
       } else {
         None
       },
@@ -94,8 +117,6 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
   }
 
   fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
-    use crate::control::ProgramCounterCount as CountControl;
-
     if let control::ReadWrite::Read = self.control.DataH {
       self.value[0] = state.read_data()?;
     }
@@ -105,20 +126,6 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
     if let control::ReadWrite::Read = self.control.Addr {
       self.value = to_bytes(state.read_addr()?);
     }
-
-    match self.control.Count {
-      CountControl::Increment => {
-        if self.value[1] == 0xFF {
-          self.value = [self.value[0] + 1, 0x00];
-        } else {
-          self.value[1] += 1;
-        }
-      },
-      CountControl::Carry => self.value[0] += 1,
-      CountControl::Borrow => self.value[0] -= 1,
-      CountControl::None => (),
-    }
-
     Ok(())
   }
 }

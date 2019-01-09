@@ -1,4 +1,7 @@
 
+use std::collections::HashMap;
+
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Read {
   Read,
@@ -31,7 +34,7 @@ pub enum StackPointerCount {
   None,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum AluSelect {
   Zero,
   One,
@@ -44,11 +47,12 @@ pub enum AluInput {
   Data,
   Addr,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum AluRotateDirection {
   Left,
   Right,
 }
+#[allow(non_snake_case)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum AluOperation {
   Add {
@@ -62,6 +66,15 @@ pub enum AluOperation {
     Carry: bool
   },
 }
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum Flag {
+  Z,
+  C,
+  V,
+  S,
+}
+pub type Flags = HashMap<Flag, bool>;
 
 
 pub trait Trait {}
@@ -150,6 +163,7 @@ pub struct Alu {
   pub Temp: Read,
   pub TempSelect: AluSelect,
   pub Input: AluInput,
+  pub Flags: Flags,
   pub Operation: AluOperation,
   pub Output: Write,
   pub Data: Write,
@@ -161,7 +175,13 @@ impl Alu {
       Temp: Read::None,
       TempSelect: AluSelect::Zero,
       Input: AluInput::Zero,
-      Operation: AluOpteration::Add {
+      Flags: hash_map!{
+        Flag::Z => false,
+        Flag::C => false,
+        Flag::V => false,
+        Flag::S => false,
+      },
+      Operation: AluOperation::Add {
         Carry: AluSelect::Zero,
       },
       Output: Write::None,

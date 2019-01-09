@@ -1,14 +1,19 @@
 
-use std::containers::HashMap;
-
 use crate::error::Error;
 use crate::control;
 
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum Addr {
+  Full(u16),
+  High(u8),
+  Low(u8),
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct State {
   pub data: Option<u8>,
-  pub addr: Option<u16>,
+  pub addr: Option<Addr>,
 }
 
 impl State {
@@ -21,8 +26,10 @@ impl State {
 
   pub fn read_addr(&self) -> Result<u16, Error> {
     match self.addr {
-      Some(value) => Ok(value),
-      None => Err(Error::InvalidRead(String::from("addr"))),
+      Some(Addr::Full(value)) => Ok(value),
+      Some(Addr::High(_)) => Err(Error::InvalidRead(String::from("addr:L"))),
+      Some(Addr::Low(_)) => Err(Error::InvalidRead(String::from("addr:H"))),
+      None => Err(Error::InvalidRead(String::from("addr:HL")))
     }
   }
 }

@@ -1,5 +1,6 @@
 
 mod hash_map;
+mod math;
 mod error;
 
 mod bus;
@@ -9,6 +10,7 @@ mod register;
 mod program_counter;
 mod stack_pointer;
 mod memory;
+mod alu;
 
 mod control_logic;
 mod cpu;

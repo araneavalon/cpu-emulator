@@ -1,4 +1,5 @@
 
+use crate::math::*;
 use crate::bus;
 // use crate::control;
 use crate::error::Error;
@@ -8,6 +9,7 @@ use crate::register::Register;
 use crate::program_counter::ProgramCounter;
 use crate::stack_pointer::StackPointer;
 use crate::memory::Memory;
+use crate::alu::Alu;
 use crate::control_logic::ControlLogic;
 
 
@@ -23,6 +25,8 @@ pub struct Cpu {
   pub y: Register,
 
   pub memory: Memory,
+
+  pub alu: Alu,
 }
 
 impl Cpu {
@@ -38,10 +42,12 @@ impl Cpu {
       y: Register::new(),
 
       memory: Memory::new(),
+
+      alu: Alu::new(),
     }
   }
 
-  fn update(&self) -> Result<(), Error> {
+  fn update(&mut self) -> Result<(), Error> {
     let control = self.ir.get_control();
 
     self.ir.update(control.Instruction)?;
@@ -54,35 +60,41 @@ impl Cpu {
     self.y.update(control.Y)?;
 
     self.memory.update(control.Memory)?;
+    self.alu.update(control.Alu)?;
 
     Ok(())
   }
 
   fn merge_states(&self, states: Vec<bus::State>) -> Result<bus::State, Error> {
-    let state = bus::State { data: None, addr: None };
+    let mut state = bus::State { data: None, addr: None };
     for s in states.iter() {
-      if let Some(_) = s.data {
-        if let None = state.data {
-          state.data = s.data;
-        } else {
-          // TODO ERROR
-        }
+      match (s.data, state.data) {
+        (Some(_), Some(_)) => return Err(Error::BusConflict(vec![String::from("data")])),
+        (Some(_), None)    => state.data = s.data,
+        (None, _)          => (),
       }
-      if let Some(_) = s.addr {
-        if let None = state.addr {
-          state.addr = s.addr;
-        } else {
-          // TODO ERROR
-        }
+      match (s.addr, state.addr) {
+        (Some(bus::Addr::Full(_)), Some(bus::Addr::Full(_))) => return Err(Error::BusConflict(vec![String::from("addr:HL")])),
+        (Some(bus::Addr::Full(_)), Some(bus::Addr::High(_))) => return Err(Error::BusConflict(vec![String::from("addr:HL,H")])),
+        (Some(bus::Addr::Full(_)), Some(bus::Addr::Low(_)))  => return Err(Error::BusConflict(vec![String::from("addr:HL,L")])),
+        (Some(bus::Addr::High(_)), Some(bus::Addr::Full(_))) => return Err(Error::BusConflict(vec![String::from("addr:H,HL")])),
+        (Some(bus::Addr::Low(_)), Some(bus::Addr::Full(_)))  => return Err(Error::BusConflict(vec![String::from("addr:L,HL")])),
+        (Some(bus::Addr::High(_)), Some(bus::Addr::High(_))) => return Err(Error::BusConflict(vec![String::from("addr:H")])),
+        (Some(bus::Addr::Low(_)), Some(bus::Addr::Low(_)))   => return Err(Error::BusConflict(vec![String::from("addr:L")])),
+        (Some(bus::Addr::High(h)), Some(bus::Addr::Low(l)))  => state.addr = Some(bus::Addr::Full(from_bytes(&[h, l]))),
+        (Some(bus::Addr::Low(l)), Some(bus::Addr::High(h)))  => state.addr = Some(bus::Addr::Full(from_bytes(&[h, l]))),
+        (Some(_), None)                                      => state.addr = s.addr,
+        (None, _)                                            => (),
       }
     }
     Ok(state)
   }
 
-  fn bus_state(&self) -> Result<bus::State, Error> {
+  fn bus_state(&mut self) -> Result<bus::State, Error> {
     let state = self.merge_states(vec![
       self.pc.read(),
       self.sp.read(),
+      self.alu.read(),
     ])?;
     self.memory.set_addr(&state)?;
     self.merge_states(vec![
@@ -95,7 +107,7 @@ impl Cpu {
     ])
   }
 
-  fn clk(&self, state: &bus::State) -> Result<(), Error> {
+  fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
     self.ir.clk(state)?;
     self.pc.clk(state)?;
     self.sp.clk(state)?;
@@ -106,12 +118,13 @@ impl Cpu {
     self.y.clk(state)?;
 
     self.memory.clk(state)?;
+    self.alu.clk(state)?;
 
     Ok(())
   }
 
 
-  fn run(&self, hz: u64) -> Result<(), Error> {
+  fn run(&mut self, hz: u64) -> Result<(), Error> {
     // Two phase clock, therefore duration is halved.
     let ms = std::time::Duration::from_millis((1000 / 2) / hz);
     loop {
