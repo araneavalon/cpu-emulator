@@ -2,24 +2,24 @@
 use std::collections::HashMap;
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Read {
   Read,
   None,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Write {
   Write,
   None,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ReadWrite {
   Read,
   Write,
   None,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ProgramCounterCount {
   Increment,
   Carry,
@@ -27,8 +27,8 @@ pub enum ProgramCounterCount {
   None,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum StackPointerCount {
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum IncDec {
   Increment,
   Decrement,
   None,
@@ -41,7 +41,7 @@ pub enum AluSelect {
   Value,
   Invert,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum AluInput {
   Zero,
   Data,
@@ -53,7 +53,7 @@ pub enum AluRotateDirection {
   Right,
 }
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum AluOperation {
   Add {
     Carry: AluSelect
@@ -67,12 +67,13 @@ pub enum AluOperation {
   },
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum Flag {
   Z,
   C,
   V,
   S,
+  I,
 }
 pub type Flags = HashMap<Flag, bool>;
 
@@ -80,7 +81,7 @@ pub type Flags = HashMap<Flag, bool>;
 pub trait Trait {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Register {
   pub Data: ReadWrite,
 }
@@ -94,7 +95,61 @@ impl Register {
 impl Trait for Register {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct HRegister {
+  pub Data: Read,
+  pub Latch: Write,
+  pub Count: IncDec,
+  pub Addr: Write,
+}
+impl HRegister {
+  pub fn new() -> HRegister {
+    HRegister {
+      Data: Read::None,
+      Latch: Write::None,
+      Count: IncDec::None,
+      Addr: Write::None,
+    }
+  }
+}
+impl Trait for HRegister {}
+
+#[allow(non_snake_case)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct LRegister {
+  pub Data: ReadWrite,
+  pub Addr: Write,
+}
+impl LRegister {
+  pub fn new() -> LRegister {
+    LRegister {
+      Data: ReadWrite::None,
+      Addr: Write::None,
+    }
+  }
+}
+impl Trait for LRegister {}
+
+#[allow(non_snake_case)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct FlagsRegister {
+  pub Data: ReadWrite,
+  pub I: Option<bool>,
+  pub C: Option<bool>,
+}
+impl FlagsRegister {
+  pub fn new() -> FlagsRegister {
+    FlagsRegister {
+      Data: ReadWrite::None,
+      I: None,
+      C: None,
+    }
+  }
+}
+impl Trait for FlagsRegister {}
+
+#[allow(non_snake_case)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Instruction {
   pub Data: Read,
 }
@@ -108,7 +163,7 @@ impl Instruction {
 impl Trait for Instruction {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct ProgramCounter {
   pub DataH: ReadWrite,
   pub DataL: ReadWrite,
@@ -128,23 +183,23 @@ impl ProgramCounter {
 impl Trait for ProgramCounter {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct StackPointer {
   pub Addr: Write,
-  pub Count: StackPointerCount,
+  pub Count: IncDec,
 }
 impl StackPointer {
   pub fn new() -> StackPointer {
     StackPointer {
       Addr: Write::None,
-      Count: StackPointerCount::None,
+      Count: IncDec::None,
     }
   }
 }
 impl Trait for StackPointer {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Memory {
   pub Data: ReadWrite,
 }
@@ -158,7 +213,7 @@ impl Memory {
 impl Trait for Memory {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Alu {
   pub Temp: Read,
   pub TempSelect: AluSelect,
@@ -194,12 +249,15 @@ impl Trait for Alu {}
 
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Control {
   pub A: Register,
   pub B: Register,
   pub X: Register,
   pub Y: Register,
+
+  pub H: HRegister,
+  pub L: LRegister,
 
   pub Instruction: Instruction,
   pub ProgramCounter: ProgramCounter,
@@ -207,6 +265,7 @@ pub struct Control {
 
   pub Memory: Memory,
 
+  pub FlagsRegister: FlagsRegister,
   pub Alu: Alu,
 }
 impl Control {
@@ -221,8 +280,12 @@ impl Control {
       X: Register::new(),
       Y: Register::new(),
 
+      H: HRegister::new(),
+      L: LRegister::new(),
+
       Memory: Memory::new(),
 
+      FlagsRegister: FlagsRegister::new(),
       Alu: Alu::new(),
     }
   }

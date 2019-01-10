@@ -5,12 +5,16 @@ use crate::bus;
 use crate::error::Error;
 
 use crate::bus::Device;
-use crate::register::Register;
+
+use crate::control_logic::ControlLogic;
 use crate::program_counter::ProgramCounter;
 use crate::stack_pointer::StackPointer;
+use crate::register::Register;
+use crate::h_register::HRegister;
+use crate::l_register::LRegister;
 use crate::memory::Memory;
+use crate::flags_register::FlagsRegister;
 use crate::alu::Alu;
-use crate::control_logic::ControlLogic;
 
 
 #[derive(Debug)]
@@ -24,8 +28,12 @@ pub struct Cpu {
   pub x: Register,
   pub y: Register,
 
+  pub h: HRegister,
+  pub l: LRegister,
+
   pub memory: Memory,
 
+  pub flags: FlagsRegister,
   pub alu: Alu,
 }
 
@@ -41,8 +49,12 @@ impl Cpu {
       x: Register::new(),
       y: Register::new(),
 
+      h: HRegister::new(),
+      l: LRegister::new(),
+
       memory: Memory::new(),
 
+      flags: FlagsRegister::new(),
       alu: Alu::new(),
     }
   }
@@ -59,7 +71,12 @@ impl Cpu {
     self.x.update(control.X)?;
     self.y.update(control.Y)?;
 
+    self.h.update(control.H)?;
+    self.l.update(control.L)?;
+
     self.memory.update(control.Memory)?;
+
+    self.flags.update(control.FlagsRegister)?;
     self.alu.update(control.Alu)?;
 
     Ok(())
@@ -94,11 +111,14 @@ impl Cpu {
     let state = self.merge_states(vec![
       self.pc.read(),
       self.sp.read(),
+      self.h.read(),
+      self.l.read(),
       self.alu.read(),
     ])?;
     self.memory.set_addr(&state)?;
     self.merge_states(vec![
       state,
+      self.flags.read(),
       self.a.read(),
       self.b.read(),
       self.x.read(),
@@ -117,22 +137,26 @@ impl Cpu {
     self.x.clk(state)?;
     self.y.clk(state)?;
 
+    self.h.clk(state)?;
+    self.l.clk(state)?;
+
     self.memory.clk(state)?;
+
+    self.flags.clk(state)?;
     self.alu.clk(state)?;
 
     Ok(())
   }
 
-
   fn run(&mut self, hz: u64) -> Result<(), Error> {
     // Two phase clock, therefore duration is halved.
-    let ms = std::time::Duration::from_millis((1000 / 2) / hz);
+    let ns = std::time::Duration::from_nanos((1_000_000_000 / 2) / hz);
     loop {
       self.update()?;
-      std::thread::sleep(ms);
+      std::thread::sleep(ns);
       let state = self.bus_state()?;
       self.clk(&state)?;
-      std::thread::sleep(ms);
+      std::thread::sleep(ns);
     }
   }
 }

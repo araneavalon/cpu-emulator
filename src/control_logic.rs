@@ -9,12 +9,14 @@ use crate::error::Error;
 #[derive(PartialEq, Eq)]
 pub struct ControlLogic {
   control: control::Instruction,
+  cycle: u8,
 }
 
 impl ControlLogic {
   pub fn new() -> ControlLogic {
     ControlLogic {
       control: control::Instruction::new(),
+      cycle: u8,
     }
   }
 

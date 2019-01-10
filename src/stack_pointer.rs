@@ -26,25 +26,24 @@ impl StackPointer {
 
 impl bus::Device<control::StackPointer> for StackPointer {
   fn update(&mut self, control: control::StackPointer) -> Result<(), Error> {
-    use crate::control::StackPointerCount as CountControl;
-
     self.control = control;
+
     match self.control.Count {
-      CountControl::Increment => {
+      control::IncDec::Increment => {
         if self.value == MAX {
           self.value = MIN
         } else {
           self.value += 1
         }
       },
-      CountControl::Decrement => {
+      control::IncDec::Decrement => {
         if self.value == MIN {
           self.value = MAX
         } else {
           self.value -= 1
         }
       },
-      CountControl::None => (),
+      control::IncDec::None => (),
     }
 
     Ok(())
@@ -61,7 +60,7 @@ impl bus::Device<control::StackPointer> for StackPointer {
     }
   }
 
-  fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
+  fn clk(&mut self, _state: &bus::State) -> Result<(), Error> {
     Ok(())
   }
 }
