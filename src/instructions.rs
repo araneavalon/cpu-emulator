@@ -1,31 +1,28 @@
 
 mod first;
 
-use crate::control;
+use crate::control::{
+  Control,
+  ReadWrite,
+  Flag,
+};
 
 
-pub struct Set {
-	instructions: HashMap<u8, Vec<control::Control>>,
+pub type Set {
+  fn fetch() -> Vec<Micro> {
+    let c = Control::new();
+    c.ProgramCounter.Addr = ReadWrite::Write;
+    c.Memory.Data = ReadWrite::Read;
+    c.Instruction.Data = ReadWrite::Read;
+    vec![Micro::Static(c)]
+  }
+
+  fn instruction(op: u8) -> Vec<Micro>;
 }
 
-impl Set {
-	pub fn new(instructions: HashMap<u8, Vec<control::Control>>) -> Set {
-		Set {
-			instructions: instructions,
-		}
-	}
 
-	pub fn fetch() -> Vec<control::Control> {
-		let c = control::Control::new();
-		c.ProgramCounter.Addr = control::ReadWrite::Write;
-		c.Memory.Data = control::ReadWrite::Read;
-		c.Instruction.Data = control::ReadWrite::Read;
-		vec![c]
-	}
-
-	pub fn instruction(op: u8) -> Vec<control::Control> {
-		let mut i = self.instructions[&op].clone();
-		i[&0].ProgramCounter.Count = ProgramCounterCount::Increment;
-		i
-	}
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum Micro {
+  Static(Control),
+  Flag(Flag, Control, Control),
 }
