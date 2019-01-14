@@ -13,7 +13,7 @@ const S_BIT: u8 = 3;
 const I_BIT: u8 = 7;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct FlagsRegister {
   control: control::FlagsRegister,
   flags: control::Flags,
@@ -107,12 +107,18 @@ impl bus::Device<control::FlagsRegister> for FlagsRegister {
 
 impl fmt::Display for FlagsRegister {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "FlagsRegister({:#X})", self.to_value())
-  }
-}
+    let c = match self.control.C {
+      Some(true) => "True",
+      Some(false) => "False",
+      None => "None",
+    };
+    let i = match self.control.I {
+      Some(true) => "True",
+      Some(false) => "False",
+      None => "None",
+    };
 
-impl fmt::Debug for FlagsRegister {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "FlagsRegister({:#X} D={:?} C={:?} I={:?})", self.to_value(), self.control.Data, self.control.C, self.control.I)
+    write!(f, "0x  {:02X} (Data={}, C={}, I={}) [FlagsRegister]",
+      self.to_value(), self.control.Data, c, i)
   }
 }

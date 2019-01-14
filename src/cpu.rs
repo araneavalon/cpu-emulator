@@ -1,4 +1,6 @@
 
+use std::fmt;
+
 use crate::bus;
 use crate::error::Error;
 
@@ -153,7 +155,6 @@ impl<T: instructions::Set> Cpu<T> {
     if self.halt {
       return Ok(());
     }
-    let mut c = 0;
     // Two phase clock, therefore duration is halved.
     let ns = std::time::Duration::from_nanos((1_000_000_000 / 2) / hz);
     loop {
@@ -164,13 +165,22 @@ impl<T: instructions::Set> Cpu<T> {
       self.clk(&state)?;
       std::thread::sleep(ns);
 
-      println!("Halt={} {}", halt, self.ir);
-      println!("PC={} A={} B={}", self.pc, self.a, self.b);
-      if halt || c > 16 {
+      if !halt {
+        println!("{}\n\n", self);
+      }
+
+      if halt {
         self.halt = true;
         return Ok(());
       }
-      c += 1;
     }
+  }
+}
+
+impl<T: instructions::Set> fmt::Display for Cpu<T> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, " IR={}\n PC={}\n SP={}\n  A={}\n  B={}\n  X={}\n  Y={}\n HL={}\nMEM={}\n  F={}\nALU={}",
+      self.ir, self.pc, self.sp, self.a, self.b, self.x, self.y,
+      self.address, self.memory, self.flags, self.alu)
   }
 }

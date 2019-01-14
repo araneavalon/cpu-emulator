@@ -24,17 +24,19 @@ use std::io::{self, Read};
 use crate::cpu::Cpu;
 use crate::instructions::first::First;
 
-fn main() -> io::Result<()> {
+fn main() {
   let stdin = io::stdin();
+
   let mut cpu = Cpu::new(Box::new(First::new()));
   loop {
-    match cpu.run(1000) {
-      Ok(_) => (),
-      Err(error) => panic!("{}", error),
-    }
-    println!("Press any key to resume execution... ");
-    stdin.lock().read(&mut [0; 1])?;
-    println!(" ... execution resumed.");
+    cpu.run(1000).unwrap();
+
+    println!("{}", cpu);
+
+    println!("Press any key to resume execution...");
+    stdin.lock().read(&mut [0; 1]).unwrap();
+    println!("... execution resumed.");
+
     cpu.resume();
   }
 }

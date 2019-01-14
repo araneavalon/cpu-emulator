@@ -1,5 +1,6 @@
 
 use std::collections::HashMap;
+use std::fmt;
 
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -7,16 +8,43 @@ pub enum Read {
   Read,
   None,
 }
+impl fmt::Display for Read {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Read::Read => write!(f, "Read"),
+      Read::None => write!(f, "None"),
+    }
+  }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Write {
   Write,
   None,
 }
+impl fmt::Display for Write {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Write::Write => write!(f, "Write"),
+      Write::None => write!(f, "None"),
+    }
+  }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReadWrite {
   Read,
   Write,
   None,
+}
+impl fmt::Display for ReadWrite {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      ReadWrite::Read => write!(f, "Read"),
+      ReadWrite::Write => write!(f, "Write"),
+      ReadWrite::None => write!(f, "None"),
+    }
+  }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -24,6 +52,15 @@ pub enum IncDec {
   Increment,
   Decrement,
   None,
+}
+impl fmt::Display for IncDec {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      IncDec::Increment => write!(f, "Increment"),
+      IncDec::Decrement => write!(f, "Decrement"),
+      IncDec::None => write!(f, "None"),
+    }
+  }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -33,17 +70,47 @@ pub enum AluSelect {
   Value,
   Invert,
 }
+impl fmt::Display for AluSelect {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      AluSelect::Zero => write!(f, "Zero"),
+      AluSelect::One => write!(f, "One"),
+      AluSelect::Value => write!(f, "Value"),
+      AluSelect::Invert => write!(f, "Invert"),
+    }
+  }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluInput {
   Zero,
   Data,
   Addr,
 }
+impl fmt::Display for AluInput {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      AluInput::Zero => write!(f, "Zero"),
+      AluInput::Data => write!(f, "Data"),
+      AluInput::Addr => write!(f, "Address"),
+    }
+  }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluRotateDirection {
   Left,
   Right,
 }
+impl fmt::Display for AluRotateDirection {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      AluRotateDirection::Left => write!(f, "Left"),
+      AluRotateDirection::Right => write!(f, "Right"),
+    }
+  }
+}
+
 #[allow(non_snake_case)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluOperation {
@@ -59,6 +126,19 @@ pub enum AluOperation {
     Carry: bool
   },
 }
+impl fmt::Display for AluOperation {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    #[allow(non_snake_case)]
+    match self {
+      AluOperation::Rotate { Direction, Carry: false } => write!(f, "Rotate{}", Direction),
+      AluOperation::Rotate { Direction, Carry: true } => write!(f, "Rotate{}Carry", Direction),
+      AluOperation::Add { SignExtend, Carry } => write!(f, "Add(Carry={}, Signed={})", Carry, SignExtend ),
+      AluOperation::And => write!(f, "And"),
+      AluOperation::Or => write!(f, "Or"),
+      AluOperation::Xor => write!(f, "Xor"),
+    }
+  }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Flag {
@@ -67,6 +147,18 @@ pub enum Flag {
   V,
   S,
   I,
+}
+impl fmt::Display for Flag {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    #[allow(non_snake_case)]
+    match self {
+      Flag::Z => write!(f, "Flag::Zero"),
+      Flag::C => write!(f, "Flag::Carry"),
+      Flag::V => write!(f, "Flag::Overflow"),
+      Flag::S => write!(f, "Flag::Sign"),
+      Flag::I => write!(f, "Flag::Interrupt"),
+    }
+  }
 }
 pub type Flags = HashMap<Flag, bool>;
 

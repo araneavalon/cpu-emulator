@@ -14,14 +14,31 @@ fn init_micro() -> Vec<control::Control> {
   vec![c]
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+enum State {
+  Init,
+  Fetch,
+  Run(u8),
+}
+
+impl fmt::Display for State {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      State::Init => write!(f, "Init"),
+      State::Fetch => write!(f, "Fetch"),
+      State::Run(cycle) => write!(f, "Run(cycle={})", cycle),
+    }
+  }
+}
+
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct ControlLogic<T: instructions::Set> {
   instructions: Box<T>,
   control: control::Instruction,
   register: u8,
 
-  fetch: bool,
-  cycle: u8,
+  state: State,
   pc: Option<control::IncDec>,
   sp: Option<control::IncDec>,
   micro: Vec<control::Control>,
@@ -34,8 +51,7 @@ impl<T: instructions::Set> ControlLogic<T> {
       control: control::Instruction::new(),
       register: 0x00,
 
-      fetch: false,
-      cycle: 0,
+      state: State::Init,
       pc: None,
       sp: None,
       micro: init_micro(),
@@ -64,29 +80,35 @@ impl<T: instructions::Set> ControlLogic<T> {
   }
 
   pub fn get_control(&mut self, flags: &control::Flags) -> control::Control {
-    self.cycle += 1;
-
     if self.micro.len() <= 0 {
-      if self.fetch {
+      // Check Fetch -> Run transition first, because a 0-cycle instruction
+      // needs to immediately transition back to Fetch.
+      if let State::Fetch = self.state {
         self.set_micro(self.instructions.get(self.register), flags);
-        self.fetch = false;
+        self.state = State::Run(0);
       }
+    } else if let State::Run(cycle) = self.state {
+      // If more microcode to execute, increase cycle count.
+      self.state = State::Run(cycle + 1);
     }
 
     if self.micro.len() <= 0 {
-      if !self.fetch {
-        self.cycle = 0;
-
-        self.set_micro(self.instructions.fetch(), flags);
-        if let Some(pc) = self.pc {
-          self.micro[0].ProgramCounter.Count = pc;
-        }
-        if let Some(sp) = self.sp {
-          self.micro[0].StackPointer.Count = sp;
-        }
-
-        self.fetch = true;
-      }
+      self.state = match self.state {
+        State::Fetch => panic!("Empty fetch state can not occur at this point."),
+        State::Init |
+        State::Run(_) => {
+          self.set_micro(self.instructions.fetch(), flags);
+          if let Some(pc) = self.pc {
+            self.micro[0].ProgramCounter.Count = pc;
+            self.pc = None;
+          }
+          if let Some(sp) = self.sp {
+            self.micro[0].StackPointer.Count = sp;
+            self.sp = None;
+          }
+          State::Fetch
+        },
+      };
     }
 
     self.micro.remove(0)
@@ -120,12 +142,12 @@ impl<T: instructions::Set> bus::Device<control::Instruction> for ControlLogic<T>
 
 impl<T: instructions::Set> fmt::Display for ControlLogic<T> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "ControlLogic({:#04X}) cycle={}", self.register, self.cycle)
-  }
-}
-
-impl<T: instructions::Set> fmt::Debug for ControlLogic<T> {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "ControlLogic({:#04X}) cycle={}", self.register, self.cycle)
+    let address = if let Some(address) = self.control.Vector {
+      format!("0x{:04X}", address)
+    } else {
+      String::from("None")
+    };
+    write!(f, "0x  {:02X} [{}] (Micro={}, Address={}, Data={}, Halt={}) [ControlLogic]",
+      self.register, self.state, self.micro.len(), address, self.control.Data, self.control.Halt)
   }
 }

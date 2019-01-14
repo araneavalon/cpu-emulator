@@ -209,34 +209,6 @@ impl bus::Device<control::Memory> for Memory {
   }
 }
 
-impl fmt::Display for Memory {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let bank = Bank::get(self.bank, self.address);
-    let value = if let Some(address) = bank.ram() {
-      format!("{:#X} RAM[{:#X}]", address, self.ram[address])
-    } else if let Some(address) = bank.rom() {
-      format!("{:#X} ROM[{:#X}]", address, self.rom[address])
-    } else {
-      String::from("")
-    };
-    write!(f, "Memory({:X} => {} bank={:b}", self.address, value, self.bank)
-  }
-}
-
-impl fmt::Debug for Memory {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let bank = Bank::get(self.bank, self.address);
-    let value = if let Some(address) = bank.ram() {
-      format!("{:#X} RAM[{:#X}]", address, self.ram[address])
-    } else if let Some(address) = bank.rom() {
-      format!("{:#X} ROM[{:#X}]", address, self.rom[address])
-    } else {
-      String::from("")
-    };
-    write!(f, "Memory({:X} => {} bank={:b}", self.address, value, self.bank)
-  }
-}
-
 impl PartialEq for Memory {
   fn eq(&self, other: &Memory) -> bool {
     self.control == other.control &&
@@ -256,3 +228,26 @@ impl PartialEq for Memory {
 }
 
 impl Eq for Memory {}
+
+impl fmt::Display for Memory {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let bank = Bank::get(self.bank, self.address);
+    let (value, source) = if let Bank::Register = bank {
+      (self.bank, String::from("BANK[     ]"))
+    } else if let Some(address) = bank.ram() {
+      (self.ram[address], format!("RAM[0x{:04X}]", address))
+    } else if let Some(address) = bank.rom() {
+      (self.rom[address], format!("ROM[0x{:04X}]", address))
+    } else {
+      (0, String::from("UNKNOWN[  ]"))
+    };
+
+    write!(f, "0x  {:02X} <= 0x{:04X} {} (Data={}, Bank=0b{:08b}) [Memory]", value, self.address, source, self.control.Data, self.bank)
+  }
+}
+
+impl fmt::Debug for Memory {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "Memory {{No Debug Implementation}}")
+  }
+}

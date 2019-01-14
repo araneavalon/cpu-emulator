@@ -6,7 +6,7 @@ use crate::control;
 use crate::error::Error;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Register {
   control: control::Register,
   value: u8,
@@ -48,12 +48,6 @@ impl bus::Device<control::Register> for Register {
 
 impl fmt::Display for Register {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Register({:#X})", self.value)
-  }
-}
-
-impl fmt::Debug for Register {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Register({:#X} D={:?})", self.value, self.control.Data)
+    write!(f, "0x  {:02X} (Data={}) [Register]", self.value, self.control.Data)
   }
 }

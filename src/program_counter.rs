@@ -7,7 +7,7 @@ use crate::control;
 use crate::error::Error;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ProgramCounter {
   control: control::ProgramCounter,
   value: u16,
@@ -89,13 +89,7 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
 
 impl fmt::Display for ProgramCounter {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "ProgramCounter({:#X})", self.value)
-  }
-}
-
-impl fmt::Debug for ProgramCounter {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "ProgramCounter({:#X} D=({:?},{:?}) A={:?} C={:?})",
-      self.value, self.control.DataH, self.control.DataL, self.control.Addr, self.control.Count)
+    write!(f, "0x{:04X} (Address={}, DataH={}, DataL={}, IncDec={}) [ProgramCounter]",
+      self.value, self.control.Addr, self.control.DataH, self.control.DataL, self.control.Count)
   }
 }

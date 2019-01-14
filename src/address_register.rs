@@ -7,7 +7,7 @@ use crate::control;
 use crate::error::Error;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct AddressRegister {
   control: control::AddressRegister,
   value: [u8; 2],
@@ -52,12 +52,7 @@ impl bus::Device<control::AddressRegister> for AddressRegister {
 
 impl fmt::Display for AddressRegister {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "AddressRegister({:#X})", from_bytes(&self.value))
-  }
-}
-
-impl fmt::Debug for AddressRegister {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "AddressRegister({:#X} H={:?} L={:?} A={:?})", from_bytes(&self.value), self.control.DataH, self.control.DataL, self.control.Addr)
+    write!(f, "0x{:04X} (Address={}, DataH={}, DataL={}) [AddressRegister]",
+      from_bytes(&self.value), self.control.Addr, self.control.DataH, self.control.DataL)
   }
 }

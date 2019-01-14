@@ -9,7 +9,7 @@ use crate::error::Error;
 const MIN: u16 = 0x0C00;
 const MAX: u16 = 0x0FFF;
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct StackPointer {
   control: control::StackPointer,
   value: u16,
@@ -67,12 +67,6 @@ impl bus::Device<control::StackPointer> for StackPointer {
 
 impl fmt::Display for StackPointer {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "StackPointer({:#X})", self.value)
-  }
-}
-
-impl fmt::Debug for StackPointer {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "StackPointer({:#X} A={:?} C={:?})", self.value, self.control.Addr, self.control.Count)
+    write!(f, "0x{:04X} (Address={}, IncDec={}) [StackPointer]", self.value, self.control.Addr, self.control.Count)
   }
 }

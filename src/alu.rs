@@ -16,7 +16,7 @@ fn overflow(a: u8, b: u8, r: u8) -> bool {
   (sign(a) == sign(b)) && (sign(a) != sign(r))
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Alu {
   control: control::Alu,
   flags: Flags,
@@ -175,13 +175,8 @@ impl bus::Device<control::Alu> for Alu {
 
 impl fmt::Display for Alu {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Alu(Temp={:#X} Output={:#X})", self.t_value, from_bytes(&self.o_value))
-  }
-}
-
-impl fmt::Debug for Alu {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    // TODO FINISH.... ALL THIS BS
-    write!(f, "Alu(Temp={:#X} Output={:#X})", self.t_value, from_bytes(&self.o_value))
+    write!(f, "0x{:04X}, 0x{:02X} (Temp={}, TempSelect={}, Input={}, Operation={}, Output={}, Address={}, Data={}) [ALU]",
+      from_bytes(&self.o_value), self.t_value, self.control.Temp, self.control.TempSelect, self.control.Input,
+      self.control.Operation, self.control.Output, self.control.Addr, self.control.Data)
   }
 }
