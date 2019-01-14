@@ -1,28 +1,19 @@
 
-mod first;
+pub mod first;
 
-use crate::control::{
-  Control,
-  ReadWrite,
-  Flag,
-};
+use crate::control::{Control, Flag};
 
 
-pub type Set {
-  fn fetch() -> Vec<Micro> {
-    let c = Control::new();
-    c.ProgramCounter.Addr = ReadWrite::Write;
-    c.Memory.Data = ReadWrite::Read;
-    c.Instruction.Data = ReadWrite::Read;
-    vec![Micro::Static(c)]
-  }
-
-  fn instruction(op: u8) -> Vec<Micro>;
+pub trait Set {
+	fn start(&self) -> u16;
+  fn fetch(&self) -> Micro;
+  fn get(&self, op: u8) -> Micro;
 }
 
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Micro {
-  Static(Control),
-  Flag(Flag, Control, Control),
+  Code(Vec<Control>),
+  Compress(Vec<Control>),
+  Branch(Flag, Box<Micro>, Box<Micro>),
 }

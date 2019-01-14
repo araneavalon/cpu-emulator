@@ -6,17 +6,18 @@ use crate::bus;
 use crate::control;
 use crate::error::Error;
 
+
 #[derive(PartialEq, Eq)]
 pub struct ProgramCounter {
   control: control::ProgramCounter,
-  value: [u8; 2],
+  value: u16,
 }
 
 impl ProgramCounter {
   pub fn new() -> ProgramCounter {
     ProgramCounter {
       control: control::ProgramCounter::new(),
-      value: [0x00, 0x00],
+      value: 0x0000,
     }
   }
 }
@@ -24,39 +25,22 @@ impl ProgramCounter {
 impl bus::Device<control::ProgramCounter> for ProgramCounter {
   fn update(&mut self, control: control::ProgramCounter) -> Result<(), Error> {
     use crate::control::ReadWrite;
-    use crate::control::ProgramCounterCount as CountControl;
+    use crate::control::Write;
+    use crate::control::IncDec;
 
     #[allow(non_snake_case)]
     let control::ProgramCounter { DataL, DataH, Count, Addr } = control;
-    if DataH == ReadWrite::Write && DataL == ReadWrite::Write {
+    if Count == IncDec::Decrement {
+      panic!("Unsupported operation for ProgramCounter: Decrement");
+    } else if DataH == Write::Write && DataL == Write::Write {
       Err(Error::BusConflict(vec![
         String::from("ProgramCounter:H"),
         String::from("ProgramCounter:L"),
       ]))
-    } else if Addr == ReadWrite::Read && DataH == ReadWrite::Read {
+    } else if Addr == ReadWrite::Read && Count != IncDec::None {
       Err(Error::UpdateConflict(vec![
         String::from("ProgramCounter:HL"),
-        String::from("ProgramCounter:H"),
-      ]))
-    } else if Addr == ReadWrite::Read && DataL == ReadWrite::Read {
-      Err(Error::UpdateConflict(vec![
-        String::from("ProgramCounter:HL"),
-        String::from("ProgramCounter:L"),
-      ]))
-    } else if Addr == ReadWrite::Read && Count != CountControl::None {
-      Err(Error::UpdateConflict(vec![
-        String::from("ProgramCounter:HL"),
-        String::from("ProgramCounter:Count"),
-      ]))
-    } else if DataH == ReadWrite::Read && Count != CountControl::None {
-      Err(Error::UpdateConflict(vec![
-        String::from("ProgramCounter:H"),
-        String::from("ProgramCounter:Count"),
-      ]))
-    } else if DataL == ReadWrite::Read && Count == CountControl::Increment {
-      Err(Error::UpdateConflict(vec![
-        String::from("ProgramCounter:L"),
-        String::from("ProgramCounter:Count"),
+        String::from("ProgramCounter:Increment"),
       ]))
     } else {
       self.control = control::ProgramCounter {
@@ -66,65 +50,38 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
         Addr: Addr,
       };
 
-      match self.control.Count {
-        CountControl::Increment => {
-          if self.value[1] == 0xFF {
-            if self.value[0] == 0xFF {
-              self.value = [0x00, 0x00];
-            } else {
-              self.value = [self.value[0] + 1, 0x00];
-            }
-          } else {
-            self.value[1] += 1;
-          }
-        },
-        CountControl::Carry => {
-          if self.value[0] == 0xFF {
-            self.value[0] = 0x00;
-          } else {
-            self.value[0] += 1;
-          }
-        },
-        CountControl::Borrow => {
-          if self.value[0] == 0x00 {
-            self.value[0] = 0xFF;
-          } else {
-            self.value[0] -= 1;
-          }
-        },
-        CountControl::None => (),
+      if let IncDec::Increment = self.control.Count {
+        if self.value == 0xFFFF {
+          self.value = 0x0000;
+        } else {
+          self.value += 1;
+        }
       }
 
       Ok(())
     }
   }
 
-  fn read(&self) -> bus::State {
-    bus::State {
-      data: if let control::ReadWrite::Write = self.control.DataH {
-        Some(self.value[0])
-      } else if let control::ReadWrite::Write = self.control.DataL {
-        Some(self.value[1])
+  fn read(&self) -> Result<bus::State, Error> {
+    Ok(bus::State {
+      data: if let control::Write::Write = self.control.DataH {
+        Some(to_bytes(self.value)[0])
+      } else if let control::Write::Write = self.control.DataL {
+        Some(to_bytes(self.value)[1])
       } else {
         None
       },
       addr: if let control::ReadWrite::Write = self.control.Addr {
-        Some(bus::Addr::Full(from_bytes(&self.value)))
+        Some(self.value)
       } else {
         None
       },
-    }
+    })
   }
 
   fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
-    if let control::ReadWrite::Read = self.control.DataH {
-      self.value[0] = state.read_data()?;
-    }
-    if let control::ReadWrite::Read = self.control.DataL {
-      self.value[1] = state.read_data()?;
-    }
     if let control::ReadWrite::Read = self.control.Addr {
-      self.value = to_bytes(state.read_addr()?);
+      self.value = state.read_addr()?;
     }
     Ok(())
   }
@@ -132,13 +89,13 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
 
 impl fmt::Display for ProgramCounter {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "ProgramCounter({:#X})", from_bytes(&self.value))
+    write!(f, "ProgramCounter({:#X})", self.value)
   }
 }
 
 impl fmt::Debug for ProgramCounter {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "ProgramCounter({:#X} D=({:?},{:?}) A={:?} C={:?})",
-      from_bytes(&self.value), self.control.DataH, self.control.DataL, self.control.Addr, self.control.Count)
+      self.value, self.control.DataH, self.control.DataL, self.control.Addr, self.control.Count)
   }
 }

@@ -19,7 +19,7 @@ impl StackPointer {
   pub fn new() -> StackPointer {
     StackPointer {
       control: control::StackPointer::new(),
-      value: MIN, // 10bit, actual range is 0x0C00 to 0x0FFF
+      value: MAX, // 10bit, actual range is 0x0C00 to 0x0FFF
     }
   }
 }
@@ -49,15 +49,15 @@ impl bus::Device<control::StackPointer> for StackPointer {
     Ok(())
   }
 
-  fn read(&self) -> bus::State {
-    bus::State {
+  fn read(&self) -> Result<bus::State, Error> {
+    Ok(bus::State {
       data: None,
       addr: if let control::Write::Write = self.control.Addr {
-        Some(bus::Addr::Full(self.value))
+        Some(self.value)
       } else {
         None
       },
-    }
+    })
   }
 
   fn clk(&mut self, _state: &bus::State) -> Result<(), Error> {

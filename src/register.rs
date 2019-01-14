@@ -27,15 +27,15 @@ impl bus::Device<control::Register> for Register {
     Ok(())
   }
 
-  fn read(&self) -> bus::State {
-    bus::State {
+  fn read(&self) -> Result<bus::State, Error> {
+    Ok(bus::State {
       data: if let control::ReadWrite::Write = self.control.Data {
         Some(self.value)
       } else {
         None
       },
       addr: None,
-    }
+    })
   }
 
   fn clk(&mut self, state: &bus::State) -> Result<(), Error> {

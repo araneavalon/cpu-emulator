@@ -33,8 +33,14 @@ impl FlagsRegister {
     }
   }
 
+  pub fn get_flags(&self) -> &control::Flags {
+    &self.flags
+  }
+
   pub fn set_flags(&mut self, flags: control::Flags) {
-    self.flags.extend(flags);
+    if let control::Read::Read = self.control.Update {
+      self.flags.extend(flags);
+    }
   }
 
   fn to_value(&self) -> u8 {
@@ -58,8 +64,8 @@ impl FlagsRegister {
 impl bus::Device<control::FlagsRegister> for FlagsRegister {
   fn update(&mut self, control: control::FlagsRegister) -> Result<(), Error> {
     match control {
-      control::FlagsRegister { Data: control::ReadWrite::Read, C: Some(_), I: _ } |
-      control::FlagsRegister { Data: control::ReadWrite::Read, C: _, I: Some(_) } =>
+      control::FlagsRegister { Data: control::ReadWrite::Read, C: Some(_), I: _, .. } |
+      control::FlagsRegister { Data: control::ReadWrite::Read, C: _, I: Some(_), .. } =>
         Err(Error::UpdateConflict(vec![
           String::from("FlagsRegister:Data"),
           String::from("FlagsRegister:Set"),
@@ -71,15 +77,15 @@ impl bus::Device<control::FlagsRegister> for FlagsRegister {
     }
   }
 
-  fn read(&self) -> bus::State {
-    bus::State {
+  fn read(&self) -> Result<bus::State, Error> {
+    Ok(bus::State {
       data: if let control::ReadWrite::Write = self.control.Data {
         Some(self.to_value())
       } else {
         None
       },
       addr: None,
-    }
+    })
   }
 
   fn clk(&mut self, state: &bus::State) -> Result<(), Error> {

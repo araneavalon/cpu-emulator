@@ -2,60 +2,53 @@
 use std::collections::HashMap;
 
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Read {
   Read,
   None,
 }
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Write {
   Write,
   None,
 }
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReadWrite {
   Read,
   Write,
   None,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum ProgramCounterCount {
-  Increment,
-  Carry,
-  Borrow,
-  None,
-}
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum IncDec {
   Increment,
   Decrement,
   None,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluSelect {
   Zero,
   One,
   Value,
   Invert,
 }
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluInput {
   Zero,
   Data,
   Addr,
 }
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluRotateDirection {
   Left,
   Right,
 }
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AluOperation {
   Add {
+    SignExtend: bool,
     Carry: AluSelect
   },
   And,
@@ -67,7 +60,7 @@ pub enum AluOperation {
   },
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Flag {
   Z,
   C,
@@ -81,7 +74,7 @@ pub type Flags = HashMap<Flag, bool>;
 pub trait Trait {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Register {
   pub Data: ReadWrite,
 }
@@ -95,45 +88,28 @@ impl Register {
 impl Trait for Register {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct HRegister {
-  pub Data: Read,
-  pub Latch: Write,
-  pub Count: IncDec,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct AddressRegister {
+  pub DataH: Read,
+  pub DataL: Read,
   pub Addr: Write,
 }
-impl HRegister {
-  pub fn new() -> HRegister {
-    HRegister {
-      Data: Read::None,
-      Latch: Write::None,
-      Count: IncDec::None,
+impl AddressRegister {
+  pub fn new() -> AddressRegister {
+    AddressRegister {
+      DataH: Read::None,
+      DataL: Read::None,
       Addr: Write::None,
     }
   }
 }
-impl Trait for HRegister {}
+impl Trait for AddressRegister {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct LRegister {
-  pub Data: ReadWrite,
-  pub Addr: Write,
-}
-impl LRegister {
-  pub fn new() -> LRegister {
-    LRegister {
-      Data: ReadWrite::None,
-      Addr: Write::None,
-    }
-  }
-}
-impl Trait for LRegister {}
-
-#[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FlagsRegister {
   pub Data: ReadWrite,
+  pub Update: Read,
   pub I: Option<bool>,
   pub C: Option<bool>,
 }
@@ -141,6 +117,7 @@ impl FlagsRegister {
   pub fn new() -> FlagsRegister {
     FlagsRegister {
       Data: ReadWrite::None,
+      Update: Read::None,
       I: None,
       C: None,
     }
@@ -149,41 +126,45 @@ impl FlagsRegister {
 impl Trait for FlagsRegister {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Instruction {
   pub Data: Read,
+  pub Halt: bool,
+  pub Vector: Option<u16>,
 }
 impl Instruction {
   pub fn new() -> Instruction {
     Instruction {
       Data: Read::None,
+      Halt: false,
+      Vector: None,
     }
   }
 }
 impl Trait for Instruction {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ProgramCounter {
-  pub DataH: ReadWrite,
-  pub DataL: ReadWrite,
+  pub DataH: Write,
+  pub DataL: Write,
   pub Addr: ReadWrite,
-  pub Count: ProgramCounterCount,
+  pub Count: IncDec,
 }
 impl ProgramCounter {
   pub fn new() -> ProgramCounter {
     ProgramCounter {
-      DataH: ReadWrite::None,
-      DataL: ReadWrite::None,
+      DataH: Write::None,
+      DataL: Write::None,
       Addr: ReadWrite::None,
-      Count: ProgramCounterCount::None,
+      Count: IncDec::None,
     }
   }
 }
 impl Trait for ProgramCounter {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StackPointer {
   pub Addr: Write,
   pub Count: IncDec,
@@ -199,7 +180,7 @@ impl StackPointer {
 impl Trait for StackPointer {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Memory {
   pub Data: ReadWrite,
 }
@@ -213,7 +194,7 @@ impl Memory {
 impl Trait for Memory {}
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Alu {
   pub Temp: Read,
   pub TempSelect: AluSelect,
@@ -221,6 +202,7 @@ pub struct Alu {
   pub Flags: Flags,
   pub Operation: AluOperation,
   pub Output: Write,
+  pub FlagOutput: Write,
   pub Data: Write,
   pub Addr: Write,
 }
@@ -237,9 +219,11 @@ impl Alu {
         Flag::S => false,
       },
       Operation: AluOperation::Add {
+        SignExtend: false,
         Carry: AluSelect::Zero,
       },
       Output: Write::None,
+      FlagOutput: Write::None,
       Data: Write::None,
       Addr: Write::None,
     }
@@ -249,15 +233,14 @@ impl Trait for Alu {}
 
 
 #[allow(non_snake_case)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Control {
   pub A: Register,
   pub B: Register,
   pub X: Register,
   pub Y: Register,
 
-  pub H: HRegister,
-  pub L: LRegister,
+  pub AddressRegister: AddressRegister,
 
   pub Instruction: Instruction,
   pub ProgramCounter: ProgramCounter,
@@ -280,8 +263,7 @@ impl Control {
       X: Register::new(),
       Y: Register::new(),
 
-      H: HRegister::new(),
-      L: LRegister::new(),
+      AddressRegister: AddressRegister::new(),
 
       Memory: Memory::new(),
 
