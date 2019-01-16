@@ -424,6 +424,7 @@ fn jmp(condition: JmpCondition, target: Address) -> Micro {
   match condition {
     JmpCondition::None => Micro::Code(c),
     JmpCondition::Flag(flag, value) => {
+      // TODO This only works for Address::Offset
       let mut n = vec![Control::new(), Control::new()];
       n[1].ProgramCounter.Count = IncDec::Increment;
 

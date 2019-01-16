@@ -1,10 +1,11 @@
 
+use std::collections::HashMap;
+
 use nom::types::CompleteStr;
 use nom::{
   digit,
   hex_digit,
-  alpha1,
-  alphanumeric0,
+  alphanumeric1,
 };
 
 
@@ -13,14 +14,15 @@ fn to_bytes(a: u16) -> [u8; 2] {
 }
 
 #[derive(Debug)]
-pub struct Label(String);
-
-#[derive(Debug)]
 pub enum Flag { Z, C, V, S, I }
 
 #[derive(Debug)]
 pub enum Register { A, B, X, Y }
 impl Register {
+  pub fn length(&self) -> Option<u16> {
+    Some(0)
+  }
+
   pub fn assemble(&self, vec: &mut Vec<u8>, op: u8, offsets: [i8; 4]) {
     use self::Register::*;
 
@@ -42,15 +44,75 @@ impl Register {
 }
 
 #[derive(Debug)]
+pub enum Labeled {
+  Const(u16),
+  Label(String),
+}
+
+#[derive(Debug)]
 pub enum Address {
   Offset(i8),
-  Direct(u16),
-  Indexed(u16, Register),
-  Indirect(u16),
-  IndirectIndexed(u16, Register),
+  Direct(Labeled),
+  Indexed(Labeled, Register),
+  Indirect(Labeled),
+  IndirectIndexed(Labeled, Register),
 }
 impl Address {
+  pub fn length(&self) -> Option<u16> {
+    if let Address::Offset(_) = self {
+      return Some(1)
+    }
+
+    let label = match self {
+      Address::Direct(l) |
+      Address::Indirect(l) |
+      Address::Indexed(l, _) |
+      Address::IndirectIndexed(l, _) => l,
+      _ => return None,
+    };
+
+    match label {
+      Labeled::Label(_) => None,
+      Labeled::Const(_) => Some(2),
+    }
+  }
+
+  pub fn resolve(&mut self, allow_offset: bool, address: u16, labels: &HashMap<String, u16>) {
+    match self {
+      Address::Direct(Labeled::Label(label)) => {
+        match labels.get(label) {
+          Some(l_addr) => {
+            let offset = (*l_addr as i32) - (address as i32);
+            if allow_offset && (-127 <= offset) && (offset <= 125) {
+              if offset < 0 {
+                // PC is at the beginning of the next instruction.
+                *self = Address::Offset((offset - 1) as i8);
+              } else {
+                *self = Address::Offset((offset + 2) as i8);
+              }
+            } else {
+              *self = Address::Direct(Labeled::Const(*l_addr));
+            }
+          },
+          None => (),
+        }
+      },
+      Address::Indirect(a) |
+      Address::Indexed(a, _) |
+      Address::IndirectIndexed(a, _) => {
+        if let Labeled::Label(label) = a {
+          match labels.get(label) {
+            Some(l_addr) => *a = Labeled::Const(*l_addr),
+            None => (),
+          }
+        }
+      },
+      _ => (),
+    }
+  }
+
   pub fn assemble(&self, vec: &mut Vec<u8>, op: u8, offsets: [i8; 7]) {
+    use self::Labeled::Const;
     use self::Address::*;
     use self::Register::{X, Y};
 
@@ -63,17 +125,18 @@ impl Address {
       }
     };
 
+    println!("Assembling {:?}", self);
     match self {
       Offset(o) => {
         vec.push(op + (offsets[0] as u8));
         vec.push(*o as u8);
       },
-      Direct(a)             => push(offsets[1], *a),
-      Indexed(a, X)         => push(offsets[2], *a),
-      Indexed(a, Y)         => push(offsets[3], *a),
-      Indirect(a)           => push(offsets[4], *a),
-      IndirectIndexed(a, X) => push(offsets[5], *a),
-      IndirectIndexed(a, Y) => push(offsets[6], *a),
+      Direct(Const(a))             => push(offsets[1], *a),
+      Indexed(Const(a), X)         => push(offsets[2], *a),
+      Indexed(Const(a), Y)         => push(offsets[3], *a),
+      Indirect(Const(a))           => push(offsets[4], *a),
+      IndirectIndexed(Const(a), X) => push(offsets[5], *a),
+      IndirectIndexed(Const(a), Y) => push(offsets[6], *a),
       _ => panic!("Attempted to assemble invalid operation."),
     }
   }
@@ -84,6 +147,22 @@ pub enum Argument {
   Byte(u8),
   Register(Register),
   Address(Address),
+}
+impl Argument {
+  pub fn length(&self) -> Option<u16> {
+    match self {
+      Argument::Byte(_) => Some(1),
+      Argument::Register(_) => Some(0),
+      Argument::Address(a) => a.length(),
+    }
+  }
+
+  pub fn resolve(&mut self, allow_offset: bool, address: u16, labels: &HashMap<String, u16>) {
+    match self {
+      Argument::Address(a) => a.resolve(allow_offset, address, labels),
+      _ => (),
+    }
+  }
 }
 
 #[derive(Debug)]
@@ -118,7 +197,54 @@ pub enum Op {
   Ld(Argument, Argument),
 }
 impl Op {
+  pub fn length(&self) -> Option<u16> {
+    use self::Op::*;
+
+    let offset = |length| {
+      match length {
+        Some(l) => Some(1 + l),
+        None => None,
+      }
+    };
+    let offset2 = |l1, l2| {
+      match (l1, l2) {
+        (Some(a), Some(b)) => Some(1 + a + b),
+        _ => None,
+      }
+    };
+
+    match self {
+      Nop | Hlt | Brk | Int | Ret | RetI => Some(1),
+      Set(_, _) => Some(1),
+      Call(a) => offset(a.length()),
+      Jmp(Some(_), _) => Some(2),
+      Jmp(None, a) => offset(a.length()),
+      Not(r) | Neg(r) | Inc(r) | Dec(r) | Rr(r) | RrC(r) | Rl(r) | RlC(r) | Pop(r) | Push(r) => offset(r.length()),
+      Add(r, a) | AddC(r, a) | Sub(r, a) | SubC(r, a) | And(r, a) | Or(r, a) | Xor(r, a) | Cmp(r, a) => offset2(r.length(), a.length()),
+      Ld(d, s) => offset2(d.length(), s.length()),
+    }
+  }
+
+  pub fn resolve(&mut self, address: u16, labels: &HashMap<String, u16>) {
+    use self::Op::*;
+    use self::Address::*;
+    use self::Labeled::*;
+
+    match self {
+      Jmp(_, a) => a.resolve(true, address, labels),
+      Call(a) => a.resolve(false, address, labels),
+      Add(_, a) | AddC(_, a) | Sub(_, a) | SubC(_, a) |
+      And(_, a) | Or(_, a) | Xor(_, a) | Cmp(_, a) => a.resolve(false, address, labels),
+      Ld(d, s) => {
+        d.resolve(false, address, labels);
+        s.resolve(false, address, labels);
+      },
+      _ => (),
+    }
+  }
+
   pub fn assemble(&self, vec: &mut Vec<u8>) {
+    use self::Labeled::Const;
     use self::Op::*;
     use self::Register::*;
     use self::Argument::*;
@@ -230,6 +356,13 @@ impl Op {
   }
 }
 
+#[derive(Debug)]
+pub enum Token {
+  Section(u16),
+  Label(String),
+  Op(Op),
+}
+
 
 named!(eat_sp(CompleteStr) -> CompleteStr, eat_separator!(&b" \t"[..]));
 macro_rules! sp (
@@ -262,6 +395,15 @@ named!(address(CompleteStr) -> u16,
   map!(preceded!(tag!("0x"), hex_digit), |s| u16::from_str_radix(&s, 16).unwrap())
 );
 
+named!(label(CompleteStr) -> String, map!(
+  recognize!(pair!(one_of!("."), alphanumeric1)),
+  |s| s.to_string()
+));
+named!(label_address(CompleteStr) -> Labeled, alt!(
+  map!(address, |a| Labeled::Const(a)) |
+  map!(label, |l| Labeled::Label(l))
+));
+
 named!(accumulator(CompleteStr) -> Register, alt!(
   value!(Register::A, tag_no_case!("A")) |
   value!(Register::B, tag_no_case!("B"))
@@ -272,22 +414,26 @@ named!(index(CompleteStr) -> Register, alt!(
 ));
 named!(register(CompleteStr) -> Register, alt!(accumulator | index));
 
-named!(offset(CompleteStr) -> Address, map!(
-  recognize!(pair!(one_of!("+-"), digit)),
-  |s| Address::Offset(i8::from_str_radix(&s, 10).unwrap())
+named!(offset(CompleteStr) -> Address, alt!(
+  map!(
+    recognize!(pair!(one_of!("+-"), digit)),
+    |s| Address::Offset(i8::from_str_radix(&s, 10).unwrap())
+  ) |
+  map!(label, |s| Address::Direct(Labeled::Label(s)))
 ));
-named!(direct(CompleteStr) -> Address,
-  map!(address, |addr| Address::Direct(addr))
-);
+named!(direct(CompleteStr) -> Address, map!(
+  label_address,
+  |addr| Address::Direct(addr)
+));
 named!(indexed(CompleteStr) -> Address, map!(
-  sp!(separated_pair!(address, tag!("+"), index)),
+  sp!(separated_pair!(label_address, tag!("+"), index)),
   |(addr, index)| Address::Indexed(addr, index)
 ));
 named!(indirect(CompleteStr) -> Address,
-  map!(delimited!(tag!("("), address, tag!(")")), |addr| Address::Indirect(addr))
+  map!(delimited!(tag!("("), label_address, tag!(")")), |addr| Address::Indirect(addr))
 );
 named!(indirect_indexed(CompleteStr) -> Address, map!(
-  sp!(separated_pair!(delimited!(tag!("("), address, tag!(")")), tag!("+"), index)),
+  sp!(separated_pair!(delimited!(tag!("("), label_address, tag!(")")), tag!("+"), index)),
   |(addr, index)| Address::IndirectIndexed(addr, index)
 ));
 
@@ -297,10 +443,10 @@ named!(argument(CompleteStr) -> Argument, alt!(
   map!(alt!(direct | indexed | indirect | indirect_indexed), |a| Argument::Address(a))
 ));
 
-named!(nop(CompleteStr) -> Op, value!(Op::Nop, tag_no_case!("NOP")));
-named!(hlt(CompleteStr) -> Op, value!(Op::Hlt, tag_no_case!("HLT")));
-named!(brk(CompleteStr) -> Op, value!(Op::Brk, tag_no_case!("BRK")));
-named!(int(CompleteStr) -> Op, value!(Op::Int, tag_no_case!("INT")));
+named!(nop(CompleteStr) -> Op, value!(Op::Nop, sp!(tag_no_case!("NOP"))));
+named!(hlt(CompleteStr) -> Op, value!(Op::Hlt, sp!(tag_no_case!("HLT"))));
+named!(brk(CompleteStr) -> Op, value!(Op::Brk, sp!(tag_no_case!("BRK"))));
+named!(int(CompleteStr) -> Op, value!(Op::Int, sp!(tag_no_case!("INT"))));
 
 named!(set(CompleteStr) -> Op, sp!(do_parse!(
   tag_no_case!("SET") >>
@@ -321,8 +467,8 @@ named!(call(CompleteStr) -> Op, sp!(do_parse!(
   target: alt!(direct | indirect | indirect_indexed) >>
   (Op::Call(target))
 )));
-named!(ret(CompleteStr) -> Op,  value!(Op::Ret, tag_no_case!("RET")));
-named!(reti(CompleteStr) -> Op, value!(Op::RetI, tag_no_case!("RETI")));
+named!(ret(CompleteStr) -> Op,  value!(Op::Ret, sp!(tag_no_case!("RET"))));
+named!(reti(CompleteStr) -> Op, value!(Op::RetI, sp!(tag_no_case!("RETI"))));
 named!(jmp(CompleteStr) -> Op,  sp!(alt!(
   do_parse!(
     tag_no_case!("JMP") >>
@@ -417,20 +563,41 @@ named!(ld(CompleteStr) -> Op, sp!(alt!(
   )
 )));
 
-named!(instruction(CompleteStr) -> Op, alt!(
-  nop | hlt | brk | int | set |
-  call | ret | reti | jmp |
-  add | addc | sub | subc | and | or | xor | cmp |
-  neg | not | inc | dec | rr | rrc | rl | rlc |
-  push | pop | ld
+named!(section(CompleteStr) -> Token, map!(
+  sp!(preceded!(pair!(tag!(".section"), one_of!(":")), address)),
+  |a| Token::Section(a)
 ));
 
-named!(parser(CompleteStr) -> Vec<Op>,
-  separated_list!(alt!(tag!("\n") | tag!("\r\n")), instruction)
-);
+named!(label_define(CompleteStr) -> Token, map!(
+  sp!(terminated!(label, one_of!(":"))),
+  |s| Token::Label(s)
+));
 
+named!(instruction(CompleteStr) -> Token, map!(
+  alt!(
+    nop | hlt | brk | int | set |
+    call | ret | reti | jmp |
+    add | addc | sub | subc | and | or | xor | cmp |
+    neg | not | inc | dec | rr | rrc | rl | rlc |
+    push | pop | ld
+  ),
+  |op| Token::Op(op)
+));
 
-pub fn parse(input: &str) -> Vec<Op> {
+named!(parser(CompleteStr) -> Vec<Token>, map!(
+  separated_list!(
+    alt!(tag!("\n") | tag!("\r\n")),
+    alt!(
+      map!(section, |s| vec![Some(s)]) |
+      map!(pair!(opt!(label_define), opt!(instruction)), |(a, b)| vec![a, b])
+    )
+  ),
+  |result: Vec<Vec<Option<Token>>>| -> Vec<Token> {
+    result.into_iter().flatten().filter_map(|v| v).collect()
+  }
+));
+
+pub fn parse(input: &str) -> Vec<Token> {
   let (remaining, parsed) = parser(CompleteStr(input)).unwrap();
   if remaining.len() > 0 {
     println!("Remaining: {:?}", remaining);
@@ -439,11 +606,76 @@ pub fn parse(input: &str) -> Vec<Op> {
 }
 
 pub fn assemble(input: &str) -> Vec<u8> {
+  let mut tokens = parse(input);
+
+  let mut sections: Vec<(u16, Vec<Token>)> = Vec::new();
+  let mut labels: HashMap<String, u16> = HashMap::new();
+
+  match tokens[0] {
+    Token::Section(_) => (),
+    _ => tokens.insert(0, Token::Section(0x0000)),
+  }
+
+  let mut iter = tokens.into_iter().peekable();
+  while let Some(token) = iter.next() {
+    println!("AA={:?}", token);
+    let (address, mut section) = match token {
+      Token::Section(address) => (address, Vec::new()),
+      _ => panic!("Beginning of section with no section token."),
+    };
+
+    let mut l_addr = Some(address);
+    while let Some(token) = iter.peek() {
+      match token {
+        Token::Section(_) => break,
+        Token::Op(_) => {
+          if let Some(Token::Op(mut op)) = iter.next() {
+            match l_addr {
+              Some(l_addr) => op.resolve(l_addr, &labels),
+              None => (),
+            }
+            l_addr = match (l_addr, op.length()) {
+              (Some(a), Some(l)) => Some(a + l),
+              _ => None,
+            };
+            section.push(Token::Op(op));
+          }
+        },
+        Token::Label(label) => {
+          match l_addr {
+            Some(addr) => { labels.insert(label.clone(), addr); },
+            None => (),
+          }
+          iter.next();
+        },
+      }
+    }
+
+    sections.push((address, section));
+  }
+
+  println!("Labels: {:?}\n", labels);
+
   let mut out: Vec<u8> = Vec::new();
 
-  for op in parse(input).iter() {
-    op.assemble(&mut out);
+  let first_section = sections[0].0;
+  for (start, section) in sections.iter_mut() {
+    for i in 0..(*start - first_section - (out.len() as u16)) {
+      out.push(0x00);
+    }
+    for token in section.iter_mut() {
+      match token {
+        Token::Section(_) => panic!("How are there section tokens here."),
+        Token::Label(op) => panic!("If there are still label tokens at this point then idk what to do lmao."),
+        Token::Op(op) => {
+          op.resolve(first_section + (out.len() as u16), &labels);
+          op.assemble(&mut out);
+        },
+      }
+    }
   }
+
+  println!("Sections: {:?}\n", sections);
 
   out
 }

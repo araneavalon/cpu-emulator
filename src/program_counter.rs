@@ -24,7 +24,6 @@ impl ProgramCounter {
 
 impl bus::Device<control::ProgramCounter> for ProgramCounter {
   fn update(&mut self, control: control::ProgramCounter) -> Result<(), Error> {
-    use crate::control::ReadWrite;
     use crate::control::Write;
     use crate::control::IncDec;
 
