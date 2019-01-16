@@ -1,5 +1,7 @@
 
 use std::fmt;
+use std::fs::File;
+use std::io::prelude::*;
 
 use crate::bus;
 use crate::control;
@@ -127,23 +129,21 @@ pub struct Memory {
 
 impl Memory {
   pub fn new() -> Memory {
-    let mut this = Memory {
+    let mut rom = [0x00; ROM_SIZE];
+
+    // let mut file = String::new();
+    // File::open(option_env!("ROM_FILE")).unwrap().read_to_string(&mut file).unwrap();
+    // for (address, byte) in file.split_whitespace().enumerate() {
+    //   rom[address] = u8::from_str_radix(byte, 16).unwrap();
+    // }
+
+    Memory {
       control: control::Memory::new(),
       address: 0x0000,
       bank: 0x00,
-      // All initialized to HLT instruction.
-      ram: [0x01; RAM_SIZE],
-      rom: [0x01; ROM_SIZE],
-    };
-    this.rom[0x0000] = 0xC0; // LD A,8
-    this.rom[0x0001] = 0x08;
-    this.rom[0x0002] = 0x60; // ADD A,8
-    this.rom[0x0003] = 0x08;
-    this.rom[0x0004] = 0xC4; // LD B,A
-    this.rom[0x0005] = 0xA0; // ADD B,16
-    this.rom[0x0006] = 0x10;
-    this.rom[0x0007] = 0x01; // HLT
-    this
+      ram: [0x00; RAM_SIZE],
+      rom: rom,
+    }
   }
 
   pub fn set_addr(&mut self, state: &bus::State) -> Result<(), Error> {

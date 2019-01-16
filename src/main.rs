@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate nom;
 
 mod hash_map;
 mod math;
@@ -19,24 +21,30 @@ mod instructions;
 
 mod cpu;
 
+mod assembler;
+
 use std::io::{self, Read};
 
 use crate::cpu::Cpu;
 use crate::instructions::first::First;
 
 fn main() {
-  let stdin = io::stdin();
+  let p = "NOPNOPLDA,0x10NOPLDA,0x10";
+  let ops = assembler::parse(p);
+  println!("{:?}", ops);
 
-  let mut cpu = Cpu::new(Box::new(First::new()));
-  loop {
-    cpu.run(1000).unwrap();
+  // let stdin = io::stdin();
 
-    println!("{}", cpu);
+  // let mut cpu = Cpu::new(Box::new(First::new()));
+  // loop {
+  //   cpu.run(1000).unwrap();
 
-    println!("Press any key to resume execution...");
-    stdin.lock().read(&mut [0; 1]).unwrap();
-    println!("... execution resumed.");
+  //   println!("{}", cpu);
 
-    cpu.resume();
-  }
+  //   println!("Press any key to resume execution...");
+  //   stdin.lock().read(&mut [0; 1]).unwrap();
+  //   println!("... execution resumed.");
+
+  //   cpu.resume();
+  // }
 }
