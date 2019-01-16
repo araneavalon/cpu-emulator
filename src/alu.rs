@@ -71,7 +71,7 @@ impl Alu {
       control::AluSelect::Invert => (!self.control.Flags[&Flag::C]) as u32,
     };
 
-    let result = temp + input + carry;
+    let result = input + temp + carry;
     let carry_out = if self.control.Input == control::AluInput::Zero {
       false
     } else if (carry_select == control::AluSelect::One || carry_select == control::AluSelect::Invert) &&
@@ -83,10 +83,10 @@ impl Alu {
     let result = to_bytes(result as u16);
 
     Ok((result, hash_map!{
-      Flag::Z => result[0] == 0,
+      Flag::Z => result[1] == 0,
       Flag::C => carry_out,
-      Flag::V => overflow(temp as u8, input as u8, result[0]),
-      Flag::S => sign(result[0]),
+      Flag::V => overflow(temp as u8, input as u8, result[1]),
+      Flag::S => sign(result[1]),
     }))
   }
 

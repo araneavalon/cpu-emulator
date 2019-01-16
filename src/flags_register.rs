@@ -118,7 +118,8 @@ impl fmt::Display for FlagsRegister {
       None => "None",
     };
 
-    write!(f, "0x  {:02X} (Data={}, C={}, I={}) [FlagsRegister]",
-      self.to_value(), self.control.Data, c, i)
+    write!(f, "0x  {:02X} (Data={}, C={}, I={}) [FlagsRegister] (Z={} C={} V={} S={} I={})",
+      self.to_value(), self.control.Data, c, i,
+      self.flags[&control::Flag::Z], self.flags[&control::Flag::C], self.flags[&control::Flag::V], self.flags[&control::Flag::S], self.flags[&control::Flag::I])
   }
 }

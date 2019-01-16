@@ -37,11 +37,6 @@ impl bus::Device<control::ProgramCounter> for ProgramCounter {
         String::from("ProgramCounter:H"),
         String::from("ProgramCounter:L"),
       ]))
-    } else if Addr == ReadWrite::Read && Count != IncDec::None {
-      Err(Error::UpdateConflict(vec![
-        String::from("ProgramCounter:HL"),
-        String::from("ProgramCounter:Increment"),
-      ]))
     } else {
       self.control = control::ProgramCounter {
         Count: Count,

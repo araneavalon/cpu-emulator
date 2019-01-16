@@ -66,8 +66,12 @@ impl<T: instructions::Set> ControlLogic<T> {
       instructions::Micro::Compress(mut c) => {
         let l = c.remove(c.len() - 1);
         self.micro = c;
-        self.pc = Some(l.ProgramCounter.Count);
-        self.sp = Some(l.StackPointer.Count);
+        if l.ProgramCounter.Count != control::IncDec::None {
+          self.pc = Some(l.ProgramCounter.Count);
+        }
+        if l.StackPointer.Count != control::IncDec::None {
+          self.sp = Some(l.StackPointer.Count);
+        }
       },
       instructions::Micro::Branch(flag, t, f) => {
         if flags[&flag] {

@@ -116,7 +116,7 @@ fn alu_dec(c: &mut Control) {
   c.Alu.TempSelect = AluSelect::One;
   c.Alu.Operation = AluOperation::Add {
     SignExtend: false,
-    Carry: AluSelect::One,
+    Carry: AluSelect::Zero,
   };
 }
 fn alu_neg(c: &mut Control) {
@@ -145,7 +145,7 @@ fn alu_rotate(c: &mut Control, direction: AluRotateDirection, carry: bool) {
 
 fn addr() -> (usize, Vec<Control>) {
   let mut c = vec![Control::new(), Control::new(), Control::new()];
-  
+
   c[0].ProgramCounter.Addr = ReadWrite::Write;
   c[0].Memory.Data = ReadWrite::Write;
   c[0].AddressRegister.DataH = Read::Read;
@@ -395,6 +395,7 @@ fn jmp(condition: JmpCondition, target: Address) -> Micro {
       c[0].Memory.Data = ReadWrite::Write;
       c[0].Alu.Temp = Read::Read;
 
+      c[1].ProgramCounter.Count = IncDec::Increment;
       c[1].ProgramCounter.Addr = ReadWrite::Write;
       c[1].Alu.Input = AluInput::Addr;
       alu_add(&mut c[1], false, true);
@@ -408,10 +409,12 @@ fn jmp(condition: JmpCondition, target: Address) -> Micro {
       c[0].Memory.Data = ReadWrite::Write;
       c[0].AddressRegister.DataH = Read::Read;
 
+      c[1].ProgramCounter.Count = IncDec::Increment;
       c[1].ProgramCounter.Addr = ReadWrite::Write;
       c[1].Memory.Data = ReadWrite::Write;
       c[1].AddressRegister.DataL = Read::Read;
 
+      c[2].ProgramCounter.Count = IncDec::Increment;
       c[2].AddressRegister.Addr = Write::Write;
       c[2].ProgramCounter.Addr = ReadWrite::Read;
     },
@@ -421,11 +424,13 @@ fn jmp(condition: JmpCondition, target: Address) -> Micro {
   match condition {
     JmpCondition::None => Micro::Code(c),
     JmpCondition::Flag(flag, value) => {
-      let n = Box::new(Micro::Compress(vec![Control::new()]));
+      let mut n = vec![Control::new(), Control::new()];
+      n[1].ProgramCounter.Count = IncDec::Increment;
+
       if value {
-        Micro::Branch(flag, Box::new(Micro::Code(c)), n)
+        Micro::Branch(flag, Box::new(Micro::Code(c)), Box::new(Micro::Compress(n)))
       } else {
-        Micro::Branch(flag, n, Box::new(Micro::Code(c)))
+        Micro::Branch(flag, Box::new(Micro::Compress(n)), Box::new(Micro::Code(c)))
       }
     },
   }
@@ -489,7 +494,7 @@ fn operation(register: Register, operation: Operation, argument: Argument) -> Mi
       c[i+2].Alu.Data = Write::Write;
       set_register(&mut c[i+2], &register, ReadWrite::Read);
 
-      (i, c)
+      (i+1, c)
     },
   };
 
@@ -504,6 +509,8 @@ fn operation(register: Register, operation: Operation, argument: Argument) -> Mi
     Operation::Compare  => {
       alu_sub(&mut c[i], false);
       c[i].Alu.Output = Write::None;
+      c[i+1].Alu.Data = Write::None;
+      set_register(&mut c[i+1], &register, ReadWrite::None);
     },
   }
   c[i].FlagsRegister.Update = Read::Read;

@@ -131,11 +131,12 @@ impl Memory {
   pub fn new() -> Memory {
     let mut rom = [0x00; ROM_SIZE];
 
-    // let mut file = String::new();
-    // File::open(option_env!("ROM_FILE")).unwrap().read_to_string(&mut file).unwrap();
-    // for (address, byte) in file.split_whitespace().enumerate() {
-    //   rom[address] = u8::from_str_radix(byte, 16).unwrap();
-    // }
+    let mut file = String::new();
+    File::open("./rom.a").unwrap().read_to_string(&mut file).unwrap();
+    let binary = crate::assembler::assemble(&file);
+    for (address, byte) in binary.iter().enumerate() {
+      rom[address] = *byte;
+    }
 
     Memory {
       control: control::Memory::new(),
