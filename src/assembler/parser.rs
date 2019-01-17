@@ -227,25 +227,25 @@ named!(line_sep(CompleteStr) -> Vec<CompleteStr>,
   many1!(alt!(tag!("\n") | tag!("\r\n")))
 );
 
-named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, delimited!(
-  opt!(line_sep),
-  many0!(
+named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, many0!(
+  delimited!(
+    opt!(line_sep),
     separated_pair!(
       section,
       line_sep,
       map!(
         separated_list!(line_sep, alt!(
-            map!(separated_pair!(label_define, line_sep, instruction), |(l, i)| vec![l, i]) |
+            map!(instruction, |i| vec![i]) |
             map!(pair!(label_define, instruction), |(l, i)| vec![l, i]) |
-            map!(instruction, |i| vec![i])
+            map!(separated_pair!(label_define, line_sep, instruction), |(l, i)| vec![l, i])
         )),
         |result: Vec<Vec<Token>>| -> Vec<Token> {
           result.into_iter().flatten().collect()
         }
       )
-    )
-  ),
-  opt!(line_sep)
+    ),
+    opt!(line_sep)
+  )
 ));
 
 pub fn parse(input: &str) -> Result<Vec<(u16, Vec<Token>)>, Error> {
