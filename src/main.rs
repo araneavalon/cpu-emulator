@@ -26,7 +26,7 @@ mod assembler;
 use std::io::{self, Read};
 
 use crate::cpu::Cpu;
-use crate::instructions::first::First;
+use crate::instructions::set::Set;
 
 fn main() {
   let stdin = io::stdin();
@@ -35,7 +35,7 @@ fn main() {
     None => 5,
   };
 
-  let mut cpu = Cpu::new(Box::new(First::new()));
+  let mut cpu = Cpu::new(Box::new(Set::new()));
   loop {
     cpu.run(hz).unwrap();
 

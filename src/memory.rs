@@ -133,7 +133,7 @@ impl Memory {
 
     let mut file = String::new();
     File::open("./rom.a").unwrap().read_to_string(&mut file).unwrap();
-    let binary = crate::assembler::assemble(&file);
+    let binary = crate::assembler::assemble(&file).unwrap();
     for (address, byte) in binary.iter().enumerate() {
       rom[address] = *byte;
     }
