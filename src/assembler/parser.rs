@@ -228,7 +228,7 @@ named!(line_sep(CompleteStr) -> Vec<CompleteStr>,
 );
 
 named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, many0!(
-  delimited!(
+  sp!(delimited!(
     opt!(line_sep),
     separated_pair!(
       section,
@@ -245,7 +245,7 @@ named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, many0!(
       )
     ),
     opt!(line_sep)
-  )
+  ))
 ));
 
 pub fn parse(input: &str) -> Result<Vec<(u16, Vec<Token>)>, Error> {

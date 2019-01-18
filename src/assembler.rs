@@ -8,24 +8,31 @@ mod assembler;
 
 use self::error::Error;
 use self::tokens::Token;
+use self::tokens::Op;
 
 
 pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
-  let mut sections: Vec<(u16, Vec<Token>)> = parser::parse(input)?;
+  let sections: Vec<(u16, Vec<Token>)> = parser::parse(input)?;
 
   let mut labels: HashMap<String, u16> = HashMap::new();
 
-  for (start, section) in sections.iter() {
-    let mut address = *start;
-    for token in section.iter() {
+  let mut sections: Vec<(u16, Vec<Op>)> = sections.into_iter().map(|(start, section)| {
+    let mut address = start;
+    (start, section.into_iter().filter_map(|token| {
       match token {
-        Token::Label(label) => { labels.insert(label.clone(), address); },
-        Token::Op(op) => address += op.len(),
+        Token::Label(label) => {
+          labels.insert(label.clone(), address);
+          None
+        },
+        Token::Op(op) => {
+          address += op.len();
+          Some(op)
+        },
       }
-    }
-  }
+    }).collect())
+  }).collect();
 
-  println!("Sections: {:?}\n", sections);
+  println!("\nSections: {:?}\n", sections);
   println!("Labels: {:?}\n", labels);
 
   let mut out: Vec<u8> = Vec::new();
@@ -41,14 +48,9 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
       out.push(0x00);
     }
 
-    for token in section.iter_mut() {
-      match token {
-        Token::Label(_) => (),
-        Token::Op(op) => {
-          op.resolve(&labels)?;
-          op.assemble(&mut out)?;
-        },
-      }
+    for op in section.iter_mut() {
+      op.resolve(&labels)?;
+      op.assemble(&mut out)?;
     }
   }
 
