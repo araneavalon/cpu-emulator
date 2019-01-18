@@ -73,9 +73,9 @@ impl Address {
 impl Argument {
   pub fn len(&self) -> u16 {
     match self {
-      Argument::Register(_) => 1,
-      Argument::Byte(_) => 2,
-      Argument::Address(_) => 3,
+      Argument::Register(_) => 0,
+      Argument::Byte(_) => 1,
+      Argument::Address(_) => 2,
     }
   }
 
@@ -97,10 +97,11 @@ impl Op {
       Not(_) | Neg(_) | Inc(_) | Dec(_) |
       Rr(_) | RrC(_) | Rl(_) | RlC(_) |
       Pop(_) | Push(_) => 1,
-      Call(_) | Jmp(_, _) => 2,
 
-      Add(_, a) | AddC(_, a) | Sub(_, a) | SubC(_, a) | And(_, a) | Or(_, a) | Xor(_, a) | Cmp(_, a) => a.len(),
-      Ld(d, s) => d.len() + s.len(),
+      Call(_) | Jmp(_, _) => 3,
+
+      Add(_, a) | AddC(_, a) | Sub(_, a) | SubC(_, a) | And(_, a) | Or(_, a) | Xor(_, a) | Cmp(_, a) => 1 + a.len(),
+      Ld(d, s) => 1 + d.len() + s.len(),
     }
   }
 
@@ -138,6 +139,7 @@ impl Op {
       Ret  => vec.push(0x0C),
       RetI => vec.push(0x0D),
       Jmp(None, a) => a.assemble(vec, 0x0E, [0, -1, -1, -1, -1, -1])?,
+      // 0x0F UNDEFINED
       Jmp(Some((Flag::Z, false)), a) => a.assemble(vec, 0x10, [0, -1, -1, -1, -1, -1])?,
       Jmp(Some((Flag::Z,  true)), a) => a.assemble(vec, 0x11, [0, -1, -1, -1, -1, -1])?,
       Jmp(Some((Flag::C, false)), a) => a.assemble(vec, 0x12, [0, -1, -1, -1, -1, -1])?,

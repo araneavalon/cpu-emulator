@@ -14,6 +14,8 @@ use self::tokens::Op;
 pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
   let sections: Vec<(u16, Vec<Token>)> = parser::parse(input)?;
 
+  println!("\nSections: {:?}\n", sections);
+
   let mut labels: HashMap<String, u16> = HashMap::new();
 
   let mut sections: Vec<(u16, Vec<Op>)> = sections.into_iter().map(|(start, section)| {
@@ -32,7 +34,7 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
     }).collect())
   }).collect();
 
-  println!("\nSections: {:?}\n", sections);
+  println!("Sections: {:?}\n", sections);
   println!("Labels: {:?}\n", labels);
 
   let mut out: Vec<u8> = Vec::new();
@@ -55,6 +57,7 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
   }
 
   println!("Sections: {:?}\n", sections);
+  println!("Out: {:?}\n", out);
 
   Ok(out)
 }

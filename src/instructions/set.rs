@@ -538,8 +538,8 @@ fn push(src: Register) -> Micro {
   let mut c = vec![Control::new(), Control::new()];
 
   c[0].StackPointer.Addr = Write::Write;
-  c[0].Memory.Data = ReadWrite::Write;
-  set_register(&mut c[0], &src, ReadWrite::Read);
+  set_register(&mut c[0], &src, ReadWrite::Write);
+  c[0].Memory.Data = ReadWrite::Read;
 
   c[1].StackPointer.Count = IncDec::Decrement;
 
@@ -550,8 +550,8 @@ fn pop(dest: Register) -> Micro {
 
   c.StackPointer.Count = IncDec::Increment;
   c.StackPointer.Addr = Write::Write;
-  set_register(&mut c, &dest, ReadWrite::Write);
-  c.Memory.Data = ReadWrite::Read;
+  c.Memory.Data = ReadWrite::Write;
+  set_register(&mut c, &dest, ReadWrite::Read);
 
   Micro::Code(vec![c])
 }

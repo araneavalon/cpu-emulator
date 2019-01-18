@@ -249,6 +249,9 @@ impl fmt::Display for Memory {
 
 impl fmt::Debug for Memory {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    for i in 0xFF0..0x1000 {
+      println!("RAM[0x{:04x}] => 0x{:02x}", i, self.ram[i])
+    }
     write!(f, "Memory {{No Debug Implementation}}")
   }
 }

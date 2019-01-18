@@ -167,6 +167,8 @@ impl<T: instructions::Set> Cpu<T> {
 
       if !halt {
         println!("{}\n\n", self);
+      } else {
+        println!("{:?}", self.memory);
       }
 
       if halt {

@@ -1,17 +1,21 @@
 .section: 0x2000
   LD  X,0
   LD  B,1
+  PUSH B
   LD  A,1
+  PUSH A
 .loop:
   CMP X,0
   JMP Z,.b
 .a:
   ADD A,B
+  PUSH A
   JMP C,.finish
   DEC X
   JMP .loop
 .b:
   ADD B,A
+  PUSH B
   JMP C,.finish
   INC X
   JMP .loop
