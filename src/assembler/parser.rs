@@ -2,7 +2,6 @@
 use nom::types::CompleteStr;
 use nom::{
   digit,
-  hex_digit,
   alphanumeric1,
   line_ending,
   not_line_ending,
@@ -31,25 +30,43 @@ macro_rules! sp (
   })
 );
 
-named!(comma(CompleteStr) -> char, one_of!(","));
 
-
+named!(hex_digit(CompleteStr) -> char, one_of!("0123456789ABCDEFabcdef"));
 named!(byte(CompleteStr) -> u8, alt!(
-  map!(preceded!(tag!("0x"), hex_digit), |s| u8::from_str_radix(&s, 16).unwrap()) |
-  map!(recognize!(pair!(opt!(one_of!("+")), digit)), |s| u8::from_str_radix(&s, 10).unwrap()) |
-  map!(recognize!(pair!(one_of!("-"), digit)), |s| i8::from_str_radix(&s, 10).unwrap() as u8)
+  map!(preceded!(tag!("0x"), recognize!(many_m_n!(2, 2, hex_digit))), |s| u8::from_str_radix(&s, 16).unwrap()) |
+  map!(preceded!(tag!("0b"), recognize!(many_m_n!(8, 8, one_of!("01")))), |s| u8::from_str_radix(&s, 2).unwrap()) |
+  map!(recognize!(pair!(opt!(char!('+')), digit)), |s| u8::from_str_radix(&s, 10).unwrap()) |
+  map!(recognize!(pair!(char!('-'), digit)), |s| i8::from_str_radix(&s, 10).unwrap() as u8)
 ));
-named!(address(CompleteStr) -> u16,
-  map!(preceded!(tag!("0x"), hex_digit), |s| u16::from_str_radix(&s, 16).unwrap())
+named!(word(CompleteStr) -> u16,
+  map!(preceded!(tag!("0x"), recognize!(many_m_n!(4, 4, hex_digit))), |s| u16::from_str_radix(&s, 16).unwrap())
 );
 
-named!(label(CompleteStr) -> String, map!(
-  recognize!(pair!(one_of!("."), alphanumeric1)),
+named!(name(CompleteStr) -> String, map!(
+  recognize!(pair!(char!('.'), alphanumeric1)),
   |s| s.to_string()
 ));
-named!(address_target(CompleteStr) -> AddressTarget, alt!(
-  map!(address, |a| AddressTarget::Address(a)) |
-  map!(label, |l| AddressTarget::Label(l))
+
+named!(unary_expr(CompleteStr) -> UnaryExpr, alt!(
+  map!(char!('*'), |_| UnaryExpr::Star) |
+  map!(word, |w| UnaryExpr::Value(Value::Word(w))) |
+  map!(byte, |b| UnaryExpr::Value(Value::Byte(b))) |
+  map!(name, |n| UnaryExpr::Name(n))
+));
+named!(expression(CompleteStr) -> Expression, alt!(
+  sp!(do_parse!(
+    lhs: unary_expr >>
+    op: one_of!("+-") >>
+    rhs: unary_expr >>
+    (match op {
+      '+' => Expression::Add(lhs, rhs),
+      '-' => Expression::Sub(lhs, rhs),
+      _ => panic!("Nom failed at parsing expxression."),
+    })
+  )) |
+  map!(sp!(preceded!(char!('>'), unary_expr)), |e| Expression::High(e)) |
+  map!(sp!(preceded!(char!('<'), unary_expr)), |e| Expression::Low(e)) |
+  map!(unary_expr, |e| Expression::Unary(e))
 ));
 
 named!(accumulator(CompleteStr) -> Register, alt!(
@@ -63,25 +80,25 @@ named!(index(CompleteStr) -> Register, alt!(
 named!(register(CompleteStr) -> Register, alt!(accumulator | index));
 
 named!(direct(CompleteStr) -> Address, map!(
-  address_target,
-  |target| Address::Direct(target)
+  expression,
+  |expr| Address::Direct(expr)
 ));
 named!(indexed(CompleteStr) -> Address, map!(
-  sp!(separated_pair!(address_target, tag!("+"), index)),
-  |(target, index)| Address::Indexed(target, index)
+  sp!(separated_pair!(expression, tag!("+"), index)),
+  |(expr, index)| Address::Indexed(expr, index)
 ));
 named!(indirect(CompleteStr) -> Address, map!(
-  delimited!(tag!("("), address_target, tag!(")")),
-  |target| Address::Indirect(target)
+  delimited!(tag!("("), expression, tag!(")")),
+  |expr| Address::Indirect(expr)
 ));
 named!(indirect_indexed(CompleteStr) -> Address, map!(
-  sp!(separated_pair!(delimited!(tag!("("), address_target, tag!(")")), tag!("+"), index)),
-  |(target, index)| Address::IndirectIndexed(target, index)
+  sp!(separated_pair!(delimited!(tag!("("), expression, tag!(")")), tag!("+"), index)),
+  |(expr, index)| Address::IndirectIndexed(expr, index)
 ));
 
 named!(argument(CompleteStr) -> Argument, alt!(
-  map!(byte, |b| Argument::Byte(b)) |
-  map!(accumulator, |r| Argument::Register(r)) |
+  map!(expression, |b| Argument::Byte(b)) |
+  map!(register, |r| Argument::Register(r)) |
   map!(alt!(direct | indexed | indirect | indirect_indexed), |a| Argument::Address(a))
 ));
 
@@ -96,7 +113,7 @@ named!(set(CompleteStr) -> Op, sp!(do_parse!(
     value!(Flag::C, tag_no_case!("C")) |
     value!(Flag::I, tag_no_case!("I"))
   ) >>
-  comma >>
+  char!(',') >>
   value: alt!(
     value!(false, tag!("0")) |
     value!(true, tag!("1"))
@@ -111,28 +128,20 @@ named!(call(CompleteStr) -> Op, sp!(do_parse!(
 )));
 named!(ret(CompleteStr) -> Op,  value!(Op::Ret, sp!(tag_no_case!("RET"))));
 named!(reti(CompleteStr) -> Op, value!(Op::RetI, sp!(tag_no_case!("RETI"))));
-named!(jmp(CompleteStr) -> Op,  sp!(alt!(
-  do_parse!(
-    tag_no_case!("JMP") >>
-    addr: direct >>
-    (Op::Jmp(None, addr))
-  ) |
-  do_parse!(
-    tag_no_case!("JMP") >>
-    cond: alt!(
-      value!((Flag::Z, false), tag_no_case!("NZ")) |
-      value!((Flag::Z,  true), tag_no_case!( "Z")) |
-      value!((Flag::C, false), tag_no_case!("NC")) |
-      value!((Flag::C,  true), tag_no_case!( "C")) |
-      value!((Flag::V, false), tag_no_case!("NV")) |
-      value!((Flag::V,  true), tag_no_case!( "V")) |
-      value!((Flag::S, false), tag_no_case!( "P")) |
-      value!((Flag::S,  true), tag_no_case!( "N"))
-    ) >>
-    comma >>
-    addr: direct >>
-    (Op::Jmp(Some(cond), addr))
-  )
+named!(jmp(CompleteStr) -> Op,  sp!(do_parse!(
+  tag_no_case!("JMP") >>
+  cond: opt!(sp!(terminated!(alt!(
+    value!((Flag::Z, false), tag_no_case!("NZ")) |
+    value!((Flag::Z,  true), tag_no_case!( "Z")) |
+    value!((Flag::C, false), tag_no_case!("NC")) |
+    value!((Flag::C,  true), tag_no_case!( "C")) |
+    value!((Flag::V, false), tag_no_case!("NV")) |
+    value!((Flag::V,  true), tag_no_case!( "V")) |
+    value!((Flag::S, false), tag_no_case!( "P")) |
+    value!((Flag::S,  true), tag_no_case!( "N"))
+  ), char!(',')))) >>
+  addr: direct >>
+  (Op::Jmp(cond, addr))
 )));
 
 macro_rules! acc_op (
@@ -140,7 +149,7 @@ macro_rules! acc_op (
     sp!($i, do_parse!(
       tag_no_case!($tag) >>
       dest: accumulator >>
-      comma >>
+      char!(',') >>
       src: argument >>
       (Op::$op(dest, src))
     ))
@@ -148,11 +157,11 @@ macro_rules! acc_op (
 );
 named!(add(CompleteStr) -> Op, sp!(alt!(
   acc_op!("ADD", Op::Add) |
-  do_parse!(tag_no_case!("ADD") >> dest: index >> comma >> src: byte >> (Op::Add(dest, Argument::Byte(src))))
+  do_parse!(tag_no_case!("ADD") >> dest: index >> char!(',') >> src: expression >> (Op::Add(dest, Argument::Byte(src))))
 )));
 named!(sub(CompleteStr) -> Op, sp!(alt!(
   acc_op!("SUB", Op::Sub) |
-  do_parse!(tag_no_case!("SUB") >> dest: index >> comma >> src: byte >> (Op::Sub(dest, Argument::Byte(src))))
+  do_parse!(tag_no_case!("SUB") >> dest: index >> char!(',') >> src: expression >> (Op::Sub(dest, Argument::Byte(src))))
 )));
 named!(addc(CompleteStr) -> Op, acc_op!("ADDC", Op::AddC));
 named!(subc(CompleteStr) -> Op, acc_op!("SUBC", Op::SubC));
@@ -164,15 +173,8 @@ named!(cmp(CompleteStr) -> Op, sp!(alt!(
   do_parse!(
     tag_no_case!("CMP") >>
     dest: index >>
-    comma >>
-    src: alt!(
-      map!(byte, |b| Argument::Byte(b)) |
-      map!(alt!(accumulator | index), |r| Argument::Register(r)) |
-      map!(
-        alt!(direct | indexed | indirect | indirect_indexed),
-        |a| Argument::Address(a)
-      )
-    ) >>
+    char!(',') >>
+    src: argument >>
     (Op::Cmp(dest, src))
   )
 )));
@@ -192,33 +194,67 @@ named!(ld(CompleteStr) -> Op, sp!(alt!(
   do_parse!(
     tag_no_case!("LD") >>
     dest: register >>
-    comma >>
+    char!(',') >>
     src: argument >>
     (Op::Ld(Argument::Register(dest), src))
   ) |
   do_parse!(
     tag_no_case!("LD") >>
     dest: alt!(direct | indexed | indirect | indirect_indexed) >>
-    comma >>
+    char!(',') >>
     src: register >>
     (Op::Ld(Argument::Address(dest), Argument::Register(src)))
   )
 )));
+
+
+named!(string(CompleteStr) -> String, map!(
+  delimited!(char!('\''), is_not!("\'"), char!('\'')),
+  |s| s.to_string()
+));
 
 named!(comment(CompleteStr) -> String, map!(
   preceded!(tag!(";"), not_line_ending),
   |s| s.to_string()
 ));
 
-named!(section(CompleteStr) -> u16, sp!(terminated!(
-  preceded!(pair!(tag!(".section"), one_of!(":")), address),
-  opt!(comment)
-)));
-
-named!(label_define(CompleteStr) -> Token, map!(
-  sp!(terminated!(label, one_of!(":"))),
-  |s| Token::Label(s)
+named!(section(CompleteStr) -> Directive, map!(
+  sp!(preceded!(tag_no_case!("#section"), word)),
+  |a| Directive::Section(a)
 ));
+named!(word_directive(CompleteStr) -> Directive, map!(
+  sp!(preceded!(tag_no_case!("#word"), separated_list!(char!(','), expression))),
+  |w| Directive::Word(w)
+));
+named!(byte_directive(CompleteStr) -> Directive, map!(
+  sp!(preceded!(
+    tag_no_case!("#byte"),
+    sp!(separated_list!(char!(','), alt!(
+      map!(expression, |b| vec![b]) |
+      map!(string, |s| -> Vec<Expression> {
+        s.into_bytes().into_iter()
+          .map(|c| Expression::Unary(UnaryExpr::Value(Value::Byte(c))))
+          .collect()
+      })
+    )))
+  )),
+  |result: Vec<Vec<Expression>>| -> Directive {
+    Directive::Byte(result.into_iter().flatten().collect())
+  }
+));
+named!(define(CompleteStr) -> Directive, sp!(do_parse!(
+  tag_no_case!("#define") >>
+  n: name >>
+  char!('=') >>
+  expr: expression >>
+  (Directive::Define(n, expr))
+)));
+named!(directive(CompleteStr) -> Token, map!(
+  alt!(section | word_directive | byte_directive | define),
+  |d| Token::Directive(d)
+));
+
+named!(label(CompleteStr) -> Token, map!(name, |s| Token::Label(s)));
 
 named!(instruction(CompleteStr) -> Token, map!(
   alt!(
@@ -233,9 +269,11 @@ named!(instruction(CompleteStr) -> Token, map!(
 
 named!(line(CompleteStr) -> Vec<Token>, terminated!(
   alt!(
+    map!(directive, |d| vec![d]) |
+    map!(sp!(pair!(label, directive)), |(l, d)| vec![l, d]) |
     map!(instruction, |i| vec![i]) |
-    map!(pair!(label_define, instruction), |(l, i)| vec![l, i]) |
-    map!(separated_pair!(label_define, line_sep, instruction), |(l, i)| vec![l, i])
+    map!(sp!(pair!(label, instruction)), |(l, i)| vec![l, i]) |
+    map!(label, |l| vec![l])
   ),
   opt!(comment)
 ));
@@ -244,23 +282,22 @@ named!(line_sep(CompleteStr) -> CompleteStr,
   recognize!(sp!(many1!(line_ending)))
 );
 
-named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, many0!(
-  sp!(delimited!(
-    opt!(line_sep),
-    separated_pair!(section, line_sep, map!(
-      separated_list!(line_sep, line),
-      |result: Vec<Vec<Token>>| -> Vec<Token> {
-        result.into_iter().flatten().collect()
-      }
-    )),
-    opt!(line_sep)
-  ))
-));
+named!(parser(CompleteStr) -> Vec<Token>, sp!(delimited!(
+  opt!(line_sep),
+  map!(
+    separated_list!(line_sep, line),
+    |line: Vec<Vec<Token>>| -> Vec<Token> {
+      line.into_iter().flatten().collect()
+    }
+  ),
+  opt!(line_sep)
+)));
 
-pub fn parse(input: &str) -> Result<Vec<(u16, Vec<Token>)>, Error> {
+pub fn parse(input: &str) -> Result<Vec<Token>, Error> {
   let (remaining, parsed) = parser(CompleteStr(input)).unwrap();
   if remaining.len() > 0 {
-    println!("Remaining: {:?}", remaining);
+    Err(Error::IncompleteParse(remaining.to_string()))
+  } else {
+    Ok(parsed)
   }
-  Ok(parsed)
 }

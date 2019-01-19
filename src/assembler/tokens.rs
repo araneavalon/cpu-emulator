@@ -1,26 +1,42 @@
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Value {
+  Byte(u8),
+  Word(u16),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum UnaryExpr {
+  Star,
+  Value(Value),
+  Name(String),
+}
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Expression {
+  Add(UnaryExpr, UnaryExpr),
+  Sub(UnaryExpr, UnaryExpr),
+  High(UnaryExpr),
+  Low(UnaryExpr),
+  Unary(UnaryExpr),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Flag { Z, C, V, S, I }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Register { A, B, X, Y }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum AddressTarget {
-  Label(String),
-  Address(u16),
-}
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Address {
-  Direct(AddressTarget),
-  Indirect(AddressTarget),
-  Indexed(AddressTarget, Register),
-  IndirectIndexed(AddressTarget, Register),
+  Direct(Expression),
+  Indirect(Expression),
+  Indexed(Expression, Register),
+  IndirectIndexed(Expression, Register),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Argument {
-  Byte(u8),
+  Byte(Expression),
   Register(Register),
   Address(Address),
 }
@@ -57,9 +73,17 @@ pub enum Op {
   Ld(Argument, Argument),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Directive {
+  Section(u16),
+  Byte(Vec<Expression>),
+  Word(Vec<Expression>),
+  Define(String, Expression)
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
+  Directive(Directive),
   Label(String),
   Op(Op),
 }

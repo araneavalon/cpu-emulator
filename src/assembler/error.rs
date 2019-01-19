@@ -18,14 +18,23 @@ pub enum Reason {
   Invalid,
 }
 
+#[derive(Debug)]
+pub enum Type {
+  Word,
+  Byte,
+}
+
 
 #[derive(Debug)]
 pub enum Error {
   ParseInt(std::num::ParseIntError),
 
   InvalidOperation(Source, Reason),
-  UnknownLabel(String),
+  UnknownName(String),
+  InvalidType(Type, Type),
   SectionOverlap(u16, u16),
+
+  IncompleteParse(String),
 }
 
 impl error::Error for Error {
@@ -33,8 +42,10 @@ impl error::Error for Error {
     match self {
       Error::ParseInt(error) => error.description(),
       Error::InvalidOperation(_, _) => "Attempted to assemble invalid operation.",
-      Error::UnknownLabel(_) => "Attempted to access a label that does not exist.",
+      Error::UnknownName(_) => "Attempted to access a name that does not exist.",
+      Error::InvalidType(_, _) => "Expression resolved to invalid type.",
       Error::SectionOverlap(_, _) => "Sections can not overlap.",
+      Error::IncompleteParse(_) => "Parser failed to consume all input.",
     }
   }
 
@@ -51,8 +62,10 @@ impl fmt::Display for Error {
     match self {
       Error::ParseInt(error) => write!(f, "ParseIntError: {}", error),
       Error::InvalidOperation(source, reason) => write!(f, "InvalidOperation: {:?} is {:?}", source, reason),
-      Error::UnknownLabel(label) => write!(f, "UnknownLabel: \"{}\"", label),
+      Error::UnknownName(name) => write!(f, "UnknownName: \"{}\"", name),
+      Error::InvalidType(expected, real) => write!(f, "InvalidType: Wanted {:?}, got {:?}.", expected, real),
       Error::SectionOverlap(end, start) => write!(f, "Section beginning at \"0x{:04x}\" overlaps ending at \"0x{:04x}\".", start, end),
+      Error::IncompleteParse(remaining) => write!(f, "Incomplete Parse: \"{}\"", remaining),
     }
   }
 }

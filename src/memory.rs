@@ -56,7 +56,7 @@ impl Bank {
       Bank::Zero(address)        => Some(address as usize),
       Bank::One(0b11, address)   => Some(address as usize),
       Bank::Two(0b01, address)   => Some(address as usize),
-      Bank::Three(0b00, address) => Some(address as usize),
+      Bank::Three(0b01, address) => Some(address as usize),
       Bank::Four(address)        => Some(address as usize),
       Bank::Five(0b00, address)  => Some(address as usize),
       Bank::Five(0b01, address)  => Some(0x08000 + (address as usize)),
@@ -74,7 +74,7 @@ impl Bank {
       Bank::One(0b01, address)   => Some(0x4000 + ((address & 0x0FFF) as usize)),
       Bank::One(0b10, address)   => Some(0x5000 + ((address & 0x0FFF) as usize)),
       Bank::Two(0b00, address)   => Some(0x0000 + ((address & 0x1FFF) as usize)),
-      Bank::Three(0b01, address) => Some(0x2000 + ((address & 0x1FFF) as usize)),
+      Bank::Three(0b00, address) => Some(0x2000 + ((address & 0x1FFF) as usize)),
       Bank::Five(0b11, address)  => Some(0x0000 + ((address & 0x1FFF) as usize)), // EXROM
       Bank::Six(0b11, address)   => Some(0x2000 + ((address & 0x1FFF) as usize)), // EXROM
       _                          => None,
