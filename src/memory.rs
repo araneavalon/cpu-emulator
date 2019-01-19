@@ -87,7 +87,7 @@ impl Bank {
 // 0   0C00-0FFF  (1k) Stack
 // 1   1000-1FFF  (4k)    IO/Hardware | ROM | RAM
 // 2   2000-3FFF  (8k)           Kernel ROM | RAM
-// 3   4000-5FFF  (8k)                  ROM | RAM
+// 3   4000-5FFF  (8k)            Forth ROM | RAM
 // 4   6000-7FFF  (8k)    RAM
 // 5   8000-BFFF (16k)    RAM | RAM | RAM
 // 6   C000-FFFF (16k)    RAM | RAM | RAM
@@ -132,7 +132,7 @@ impl Memory {
     let mut rom = [0x00; ROM_SIZE];
 
     let mut file = String::new();
-    File::open("./rom.a").unwrap().read_to_string(&mut file).unwrap();
+    File::open("./rom.asm").unwrap().read_to_string(&mut file).unwrap();
     let binary = crate::assembler::assemble(&file).unwrap();
     for (address, byte) in binary.iter().enumerate() {
       rom[address] = *byte;

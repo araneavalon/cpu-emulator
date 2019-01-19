@@ -4,6 +4,8 @@ use nom::{
   digit,
   hex_digit,
   alphanumeric1,
+  line_ending,
+  not_line_ending,
 };
 
 use crate::assembler::error::Error;
@@ -203,9 +205,15 @@ named!(ld(CompleteStr) -> Op, sp!(alt!(
   )
 )));
 
-named!(section(CompleteStr) -> u16,
-  sp!(preceded!(pair!(tag!(".section"), one_of!(":")), address))
-);
+named!(comment(CompleteStr) -> String, map!(
+  preceded!(tag!(";"), not_line_ending),
+  |s| s.to_string()
+));
+
+named!(section(CompleteStr) -> u16, sp!(terminated!(
+  preceded!(pair!(tag!(".section"), one_of!(":")), address),
+  opt!(comment)
+)));
 
 named!(label_define(CompleteStr) -> Token, map!(
   sp!(terminated!(label, one_of!(":"))),
@@ -223,27 +231,28 @@ named!(instruction(CompleteStr) -> Token, map!(
   |op| Token::Op(op)
 ));
 
-named!(line_sep(CompleteStr) -> Vec<CompleteStr>,
-  many1!(alt!(tag!("\n") | tag!("\r\n")))
+named!(line(CompleteStr) -> Vec<Token>, terminated!(
+  alt!(
+    map!(instruction, |i| vec![i]) |
+    map!(pair!(label_define, instruction), |(l, i)| vec![l, i]) |
+    map!(separated_pair!(label_define, line_sep, instruction), |(l, i)| vec![l, i])
+  ),
+  opt!(comment)
+));
+
+named!(line_sep(CompleteStr) -> CompleteStr,
+  recognize!(sp!(many1!(line_ending)))
 );
 
 named!(parser(CompleteStr) -> Vec<(u16, Vec<Token>)>, many0!(
   sp!(delimited!(
     opt!(line_sep),
-    separated_pair!(
-      section,
-      line_sep,
-      map!(
-        separated_list!(line_sep, alt!(
-            map!(instruction, |i| vec![i]) |
-            map!(pair!(label_define, instruction), |(l, i)| vec![l, i]) |
-            map!(separated_pair!(label_define, line_sep, instruction), |(l, i)| vec![l, i])
-        )),
-        |result: Vec<Vec<Token>>| -> Vec<Token> {
-          result.into_iter().flatten().collect()
-        }
-      )
-    ),
+    separated_pair!(section, line_sep, map!(
+      separated_list!(line_sep, line),
+      |result: Vec<Vec<Token>>| -> Vec<Token> {
+        result.into_iter().flatten().collect()
+      }
+    )),
     opt!(line_sep)
   ))
 ));
