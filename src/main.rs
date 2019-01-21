@@ -12,6 +12,8 @@ mod program_counter;
 mod stack_pointer;
 mod register;
 mod address_register;
+mod memory_controller;
+mod io_controller;
 mod memory;
 mod flags_register;
 mod alu;

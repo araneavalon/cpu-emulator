@@ -6,8 +6,8 @@ use crate::control;
 use crate::error::Error;
 
 
-const MIN: u16 = 0x0C00;
-const MAX: u16 = 0x0FFF;
+const MIN: u16 = 0x0400;
+const MAX: u16 = 0x07FF;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct StackPointer {

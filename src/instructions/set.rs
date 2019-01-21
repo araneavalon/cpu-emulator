@@ -903,4 +903,8 @@ impl instructions::Set for Set {
   fn get(&self, byte: u8) -> Micro {
     self.instructions[&byte].clone()
   }
+
+  fn interrupt(&self) -> Micro {
+    interrupt(&crate::memory::INTERRUPT_HANDLER, false)
+  }
 }

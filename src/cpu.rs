@@ -13,7 +13,7 @@ use crate::program_counter::ProgramCounter;
 use crate::stack_pointer::StackPointer;
 use crate::register::Register;
 use crate::address_register::AddressRegister;
-use crate::memory::Memory;
+use crate::memory_controller::MemoryController;
 use crate::flags_register::FlagsRegister;
 use crate::alu::Alu;
 
@@ -33,7 +33,7 @@ pub struct Cpu<T: instructions::Set> {
 
   address: AddressRegister,
 
-  memory: Memory,
+  memory: MemoryController,
 
   flags: FlagsRegister,
   alu: Alu,
@@ -55,7 +55,7 @@ impl<T: instructions::Set> Cpu<T> {
 
       address: AddressRegister::new(),
 
-      memory: Memory::new(),
+      memory: MemoryController::new(),
 
       flags: FlagsRegister::new(),
       alu: Alu::new(),

@@ -214,7 +214,7 @@ named!(string(CompleteStr) -> String, map!(
 ));
 
 named!(comment(CompleteStr) -> String, map!(
-  preceded!(tag!(";"), not_line_ending),
+  preceded!(tag!("//"), not_line_ending),
   |s| s.to_string()
 ));
 

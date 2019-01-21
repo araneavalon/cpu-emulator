@@ -10,6 +10,7 @@ pub trait Set {
 	fn start(&self) -> u16;
   fn fetch(&self) -> Micro;
   fn get(&self, op: u8) -> Micro;
+  fn interrupt(&self) -> Micro;
 }
 
 
