@@ -1,21 +1,25 @@
 
+use gtk::prelude::*;
+
 use crate::math::*;
 
-// 0x004 Cursor Mode .HHH..AB
+
+// 0x004 Cursor Mode EHHH..AB
+//         E   Enable
 //       	 HHH Height
-//         A   Advance
+//         A   Auto Advance
 //         B   Blink
-// 0x005 Display Mode FFRCCCMM
+// 0x005 Display Mode FCCCRRMM
 //         F   Font size (0=6x8, 1=8x8)
-//         F   Internal Font Select
-//         R   Character ROM/RAM
-//         CCC Combine Mode (OR,XOR,,AND,TEXT_ATTRIBUTE)
+//         CCC Combine Mode (000=OR,001=XOR,011=AND,100=TEXT_ATTRIBUTE)
+//         RR  Character Generator (00=ASCII, 01=Japanese Thing, 10=Surprise ;), 11=Character RAM)
 //         MM  Display Mode (01=Text, 10=Graphic, 11=Both)
 // 0x006 Cursor Address X (0x00-0x27) / (0x00-0x1D)
 // 0x007 Cursor Address Y (0x00-0x0F)
 
-const FONT_0: [u8; 128 * 8] = include_bytes!("./cgrom_0.hex");
-const FONT_1: [u8; 128 * 8] = include_bytes!("./cgrom_1.hex");
+const CG_ASCII: [u8; 1024] = include_bytes!("./cgrom_ascii.hex");
+const CG_JAPANESE: [u8; 1024] = [0x55; 1024]; // include_bytes!("./cgrom_japanese.hex");
+const CG_SURPRISE: [u8; 1024] = include_bytes!("./cgrom_surprise.hex");
 
 pub struct Screen {
 	ram: [u8; 0x1F00],
@@ -76,9 +80,48 @@ impl Screen {
 		self.ram[address as usize] = value;
 		Ok(())
 	}
-
-
-	fn terminal_control(&self) {
-
-	}
 }
+
+
+struct Cursor {
+	enabled: bool,
+	// height: usize,
+	advance: bool,
+	blink: bool,
+	position: [u8; 2],
+}
+// enum CombineMode {
+// 	Or,
+// 	Xor,
+// 	And,
+// 	Attribute,
+// }
+enum CharacterSet {
+	Ascii,
+	// Japanese,
+	Surprise,
+	// Custom,
+}
+struct Model {
+	text: [u8; 0x800],
+	// pixel: [u8; 0xF00],
+	// characters: [u8; 1024],
+	cursor: Cursor,
+	// font_size: bool,
+	// combine_mode: CombineMode,
+	character_set: CharacterSet,
+	// text_enable: bool,
+	// graphics_enable: bool,
+	text_start: usize,
+}
+
+#[derive(Msg)]
+enum Msg {
+	Update(usize, )
+	Cursor(Cursor),
+	CharacterSet(CharacterSet),
+	TextStart(usize),
+	Quit,
+}
+
+

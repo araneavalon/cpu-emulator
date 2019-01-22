@@ -5,10 +5,11 @@
 // 0x1000-0x1EFF Graphics (1 screen)
 // 0x1F00-0x1FFF IO Ports
 
-
+// IO Ports
+// 0x000 Bank Register
+// 0x001 Keyboard Status
 // 0x002 Keyboard Key
 // 0x003 Keyboard Character
-
 // 0x004 Cursor Mode
 // 0x005 Display Mode
 // 0x006 Cursor Address X (0x00-0x27) / (0x00-0x1D)
@@ -56,6 +57,7 @@ impl Io {
 			return Ok(screen.get_ram(address)?)
 		}
 		match (address & 0x00FF) {
+			0x01 => Ok(self.keyboard.get_status()?),
 			0x02 => Ok(self.keyboard.get_key()?),
 			0x03 => Ok(self.keyboard.get_char()?),
 			0x04 => Ok(self.screen.get_display_mode()?),
@@ -73,6 +75,7 @@ impl Io {
 			return Ok(screen.set_ram(address, value)?)
 		}
 		match (address & 0x00FF) {
+			0x01 => Err(Error::InvalidWrite("IO address 0x01 is not writable.")),
 			0x02 => Err(Error::InvalidWrite("IO address 0x02 is not writable.")),
 			0x03 => Err(Error::InvalidWrite("IO address 0x03 is not writable.")),
 			0x04 => Ok(self.screen.set_display_mode(value)?),
