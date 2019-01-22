@@ -1,4 +1,6 @@
 
+use framebuffer::{Framebuffer, KdMode};
+use std::io::{self, Read};
 use std::fmt;
 
 use crate::bus;
@@ -18,7 +20,6 @@ use crate::flags_register::FlagsRegister;
 use crate::alu::Alu;
 
 
-#[derive(Debug)]
 pub struct Cpu<T: instructions::Set> {
   halt: bool,
 
@@ -60,10 +61,6 @@ impl<T: instructions::Set> Cpu<T> {
       flags: FlagsRegister::new(),
       alu: Alu::new(),
     }
-  }
-
-  pub fn resume(&mut self) {
-    self.halt = false;
   }
 
   fn update(&mut self) -> Result<bool, Error> {
@@ -151,29 +148,68 @@ impl<T: instructions::Set> Cpu<T> {
     Ok(())
   }
 
+
+  fn tick(&mut self, ns: std::time::Duration) -> Result<bool, Error> {
+    let halt = self.update()?;
+    std::thread::sleep(ns);
+
+    let state = self.bus_state()?;
+    self.clk(&state)?;
+    std::thread::sleep(ns);
+
+    Ok(halt)
+  }
+
+  fn draw(&self, fb: &mut Framebuffer, scale: u32) -> Result<(), Error> {
+    let frame: Vec<u8> = self.memory.io.screen.get_frame()?;
+    fb.write_frame(&frame);
+    Ok(())
+  }
+
+  fn setup_fb(&self, fb: &mut Framebuffer) -> u32 {
+    // let w = fb.var_screen_info.xres;
+    // let h = fb.var_screen_info.yres;
+    // let scale = std::cmp::min(w / 240, h / 128);
+    // let xo = (w - (240 * scale)) / 2;
+    // let yo = (h - (128 * scale)) / 2;
+
+    let info = &mut fb.var_screen_info;
+
+    info.bits_per_pixel = 1;
+    info.grayscale = 1;
+
+    Framebuffer::put_var_screeninfo(&fb.device, &info).unwrap();
+
+    0
+  }
+
   pub fn run(&mut self, hz: u64) -> Result<(), Error> {
-    if self.halt {
-      return Ok(());
-    }
-    // Two phase clock, therefore duration is halved.
-    let ns = std::time::Duration::from_nanos((1_000_000_000 / 2) / hz);
+    let ticks_per_frame = hz / 60;
+    let tick = std::time::Duration::from_nanos(1_000_000_000 / hz);
+    let half_tick = std::time::Duration::from_nanos(500_000_000 / 2);
+
+    let stdin = io::stdin();
+
+    let mut fb = Framebuffer::new("/dev/fb0").unwrap();
+    let scale = self.setup_fb(&mut fb);
+    let _ = Framebuffer::set_kd_mode(KdMode::Graphics).unwrap();
+
+    let mut ticks: u64 = 0;
     loop {
-      let halt = self.update()?;
-      std::thread::sleep(ns);
+      self.halt = self.tick(half_tick)?;
 
-      let state = self.bus_state()?;
-      self.clk(&state)?;
-      std::thread::sleep(ns);
-
-      if !halt {
-        println!("{}\n\n", self);
-      } else {
-        println!("{:?}", self.memory);
+      ticks += 1;
+      if ticks >= ticks_per_frame {
+        ticks = 0;
+        self.draw(&mut fb, scale)?;
       }
 
-      if halt {
-        self.halt = true;
-        return Ok(());
+      if self.halt {
+        let _ = Framebuffer::set_kd_mode(KdMode::Text).unwrap();
+        println!("Press any key to resume execution...");
+        stdin.read_line(&mut String::new()).unwrap();
+        println!("... execution resumed.");
+        let _ = Framebuffer::set_kd_mode(KdMode::Graphics).unwrap();
       }
     }
   }
@@ -181,7 +217,15 @@ impl<T: instructions::Set> Cpu<T> {
 
 impl<T: instructions::Set> fmt::Display for Cpu<T> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, " IR={}\n PC={}\n SP={}\n  A={}\n  B={}\n  X={}\n  Y={}\n HL={}\nMEM={}\n  F={}\nALU={}",
+    write!(f, "  A={}   B={}   X={}   Y={}\n PC={}  SP={} HL={}\n  F={} ALU={}\n IR={}\nMEM={}",
+      self.a, self.b, self.x, self.y, self.pc, self.sp,
+      self.address, self.flags, self.alu, self.ir, self.memory)
+  }
+}
+
+impl<T: instructions::Set> fmt::Debug for Cpu<T> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, " IR={:?}\n PC={:?}\n SP={:?}\n  A={:?}\n  B={:?}\n  X={:?}\n  Y={:?}\n HL={:?}\nMEM={:?}\n  F={:?}\nALU={:?}",
       self.ir, self.pc, self.sp, self.a, self.b, self.x, self.y,
       self.address, self.memory, self.flags, self.alu)
   }

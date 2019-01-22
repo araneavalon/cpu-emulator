@@ -42,7 +42,7 @@ impl Memory {
     Ok(self.ram[address])
   }
 
-  pub fn set_ram(&self, address: usize, value: u8) -> Result<(), Error> {
+  pub fn set_ram(&mut self, address: usize, value: u8) -> Result<(), Error> {
     self.ram[address] = value;
     Ok(())
   }

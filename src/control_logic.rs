@@ -7,9 +7,9 @@ use crate::instructions;
 use crate::error::Error;
 
 
-fn init_micro() -> Vec<control::Control> {
+fn init_micro<T: instructions::Set>(instructions: &Box<T>) -> Vec<control::Control> {
   let mut c = control::Control::new();
-  c.Instruction.Vector = Some(crate::memory::START_ADDRESS);
+  c.Instruction.Vector = Some(instructions.start());
   c.ProgramCounter.Addr = control::ReadWrite::Read;
   vec![c]
 }
@@ -32,7 +32,7 @@ impl fmt::Display for State {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct ControlLogic<T: instructions::Set> {
   instructions: Box<T>,
   control: control::Instruction,
@@ -46,6 +46,7 @@ pub struct ControlLogic<T: instructions::Set> {
 
 impl<T: instructions::Set> ControlLogic<T> {
   pub fn new(instructions: Box<T>) -> ControlLogic<T> {
+    let micro = init_micro(&instructions);
     ControlLogic {
       instructions: instructions,
       control: control::Instruction::new(),
@@ -54,7 +55,7 @@ impl<T: instructions::Set> ControlLogic<T> {
       state: State::Init,
       pc: None,
       sp: None,
-      micro: init_micro(),
+      micro: micro,
     }
   }
 
@@ -151,7 +152,19 @@ impl<T: instructions::Set> fmt::Display for ControlLogic<T> {
     } else {
       String::from("None")
     };
-    write!(f, "0x  {:02X} [{}] (Micro={}, Address={}, Data={}, Halt={}) [ControlLogic]",
+    write!(f, "0x  {:02X} [{}] Micro={} Address={}",
+      self.register, self.state, self.micro.len(), address)
+  }
+}
+
+impl<T: instructions::Set> fmt::Debug for ControlLogic<T> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let address = if let Some(address) = self.control.Vector {
+      format!("0x{:04X}", address)
+    } else {
+      String::from("None")
+    };
+    write!(f, "0x  {:02X} [{:?}] (Micro={:?}, Address={}, Data={:?}, Halt={:?}) [ControlLogic]",
       self.register, self.state, self.micro.len(), address, self.control.Data, self.control.Halt)
   }
 }

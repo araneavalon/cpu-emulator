@@ -18,15 +18,15 @@
 // SD Stuff
 
 
-mod keyboard;
+// mod keyboard;
 mod screen;
 
 use std::fmt;
 
 use crate::math::*;
 use crate::error::Error;
-use crate::io::keyboard::{self, Keyboard};
-use crate::io::screen::{self, Screen};
+// use crate::io::keyboard::Keyboard;
+use crate::io::screen::Screen;
 
 
 // SCREEN:
@@ -40,51 +40,51 @@ use crate::io::screen::{self, Screen};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Io {
-	keyboard: Keyboard,
-	screen: Screen,
+  // pub keyboard: Keyboard,
+  pub screen: Screen,
 }
 
 impl Io {
-	pub fn new() -> Io {
-		Io {
-			keyboard: Keyboard,
-			screen: Screen,
-		}
-	}
+  pub fn new() -> Io {
+    Io {
+      // keyboard: Keyboard::new(),
+      screen: Screen::new(),
+    }
+  }
 
-	pub fn get_value(&self, address: usize) -> Result<u8, Error> {
-		if address <= 0x1EFF {
-			return Ok(screen.get_ram(address)?)
-		}
-		match (address & 0x00FF) {
-			0x01 => Ok(self.keyboard.get_status()?),
-			0x02 => Ok(self.keyboard.get_key()?),
-			0x03 => Ok(self.keyboard.get_char()?),
-			0x04 => Ok(self.screen.get_display_mode()?),
-			0x05 => Ok(self.screen.get_cursor_mode()?),
-			0x06 => Ok(self.screen.get_cursor_pos(0)?),
-			0x07 => Ok(self.screen.get_cursor_pos(1)?),
-			0x08 => Ok(to_bits(self.screen.get_text_start()?)[0]),
-			0x09 => Ok(to_bits(self.screen.get_text_start()?)[1]),
-			_ => Err(Error::Error(String::from("Unknown IO address."))),
-		}
-	}
+  pub fn get_value(&self, address: u16) -> Result<u8, Error> {
+    if address <= 0x1EFF {
+      return Ok(self.screen.get_ram(address)?)
+    }
+    match (address & 0x00FF) {
+      // 0x01 => Ok(self.keyboard.get_status()?),
+      // 0x02 => Ok(self.keyboard.get_key()?),
+      // 0x03 => Ok(self.keyboard.get_char()?),
+      0x04 => Ok(self.screen.get_display_mode()?),
+      0x05 => Ok(self.screen.get_cursor_mode()?),
+      0x06 => Ok(self.screen.get_cursor_pos(0)?),
+      0x07 => Ok(self.screen.get_cursor_pos(1)?),
+      0x08 => Ok(to_bytes(self.screen.get_text_start()?)[0]),
+      0x09 => Ok(to_bytes(self.screen.get_text_start()?)[1]),
+      _ => Err(Error::Error(String::from("Unknown IO address."))),
+    }
+  }
 
-	pub fn set_value(&mut self, address: usize, value: u8) -> Result<(), Error> {
-		if address <= 0x1EFF {
-			return Ok(screen.set_ram(address, value)?)
-		}
-		match (address & 0x00FF) {
-			0x01 => Err(Error::InvalidWrite("IO address 0x01 is not writable.")),
-			0x02 => Err(Error::InvalidWrite("IO address 0x02 is not writable.")),
-			0x03 => Err(Error::InvalidWrite("IO address 0x03 is not writable.")),
-			0x04 => Ok(self.screen.set_display_mode(value)?),
-			0x05 => Ok(self.screen.set_cursor_mode(value)?),
-			0x06 => Ok(self.screen.set_cursor_pos(0, value)?),
-			0x07 => Ok(self.screen.set_cursor_pos(1, value)?),
-			0x08 => Ok(self.screen.set_text_start(0, value)?),
-			0x09 => Ok(self.screen.set_text_start(1, value)?),
-			_ => Err(Error::Error(String::from("Unknown IO address."))),
-		}
-	}
+  pub fn set_value(&mut self, address: u16, value: u8) -> Result<(), Error> {
+    if address <= 0x1EFF {
+      return Ok(self.screen.set_ram(address, value)?)
+    }
+    match (address & 0x00FF) {
+      0x01 => Err(Error::InvalidWrite(String::from("IO address 0x01 is not writable."))),
+      0x02 => Err(Error::InvalidWrite(String::from("IO address 0x02 is not writable."))),
+      0x03 => Err(Error::InvalidWrite(String::from("IO address 0x03 is not writable."))),
+      0x04 => Ok(self.screen.set_display_mode(value)?),
+      0x05 => Ok(self.screen.set_cursor_mode(value)?),
+      0x06 => Ok(self.screen.set_cursor_pos(0, value)?),
+      0x07 => Ok(self.screen.set_cursor_pos(1, value)?),
+      0x08 => Ok(self.screen.set_text_start(0, value)?),
+      0x09 => Ok(self.screen.set_text_start(1, value)?),
+      _ => Err(Error::Error(String::from("Unknown IO address."))),
+    }
+  }
 }

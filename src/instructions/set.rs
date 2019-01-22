@@ -608,8 +608,8 @@ impl Set {
     let mut instructions = hash_map!{
       0b00000000 => nop(),
       0b00000001 => halt(), // HLT
-      0b00000010 => interrupt(&crate::memory::BREAK_HANDLER, true), // BRK
-      0b00000011 => interrupt(&crate::memory::INTERRUPT_HANDLER, false), // INT
+      0b00000010 => interrupt(&crate::memory_controller::BREAK_HANDLER, true), // BRK
+      0b00000011 => interrupt(&crate::memory_controller::INTERRUPT_HANDLER, false), // INT
       0b00000100 => set_flag(Flag::C, false),
       0b00000101 => set_flag(Flag::C, true),
       0b00000110 => set_flag(Flag::I, false),
@@ -889,7 +889,7 @@ impl Set {
 
 impl instructions::Set for Set {
   fn start(&self) -> u16 {
-    crate::memory::START_ADDRESS
+    crate::memory_controller::START_ADDRESS
   }
 
   fn fetch(&self) -> Micro {
@@ -905,6 +905,6 @@ impl instructions::Set for Set {
   }
 
   fn interrupt(&self) -> Micro {
-    interrupt(&crate::memory::INTERRUPT_HANDLER, false)
+    interrupt(&crate::memory_controller::INTERRUPT_HANDLER, false)
   }
 }

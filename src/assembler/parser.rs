@@ -273,7 +273,8 @@ named!(line(CompleteStr) -> Vec<Token>, terminated!(
     map!(sp!(pair!(label, directive)), |(l, d)| vec![l, d]) |
     map!(instruction, |i| vec![i]) |
     map!(sp!(pair!(label, instruction)), |(l, i)| vec![l, i]) |
-    map!(label, |l| vec![l])
+    map!(label, |l| vec![l]) |
+    map!(comment, |_| vec![])
   ),
   opt!(comment)
 ));

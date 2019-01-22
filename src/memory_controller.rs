@@ -53,7 +53,7 @@ enum Bank {
   Register,
   Ram(usize),
   Rom(usize),
-  Io(usize),
+  Io(u16),
   Exrom(usize),
   Invalid,
 }
@@ -62,43 +62,47 @@ impl Bank {
   fn get(bank: u8, address: u16) -> Bank {
     let address: usize = address as usize;
 
-    if address == BANK_ADDRESS {
+    if address == (BANK_ADDRESS as usize) {
       Bank::Register
     } else if address <= 0x1FFF {
       Bank::Ram(address)
     } else if address <= 0x3FFF {
-      Bank::Io(address)
+      Bank::Io(address as u16)
     } else if address <= 0x5FFF {
       match (bank >> 0) & 0b1 {
         0b0 => Bank::Rom(0x0000 + (address & 0x1FFF)),
         0b1 => Bank::Ram(address),
+        _ => panic!("This is literally impossible."),
       }
     } else if address <= 0x7FFF {
       match (bank >> 1) & 0b1 {
         0b0 => Bank::Rom(0x2000 + (address & 0x1FFF)),
         0b1 => Bank::Ram(address),
+        _ => panic!("This is literally impossible."),
       }
     } else if address <= 0xBFFF {
       match (bank >> 2) & 0b111 {
         0b000 => Bank::Ram(0x08000 + (address & 0x3FFF)),
         0b010 => Bank::Ram(0x10000 + (address & 0x3FFF)),
         0b001 => Bank::Ram(0x18000 + (address & 0x3FFF)),
-        0b011 => Bank::Invalid(address),
+        0b011 => Bank::Invalid,
         0b100 => Bank::Exrom(0x0000 + (address & 0x3FFF)),
         0b101 => Bank::Exrom(0x4000 + (address & 0x3FFF)),
         0b110 => Bank::Exrom(0x8000 + (address & 0x3FFF)),
         0b111 => Bank::Exrom(0xC000 + (address & 0x3FFF)),
+        _ => panic!("This is literally impossible."),
       }
     } else {
       match (bank >> 5) & 0b111 {
         0b000 => Bank::Ram(0x0C000 + (address & 0x3FFF)),
         0b010 => Bank::Ram(0x14000 + (address & 0x3FFF)),
         0b001 => Bank::Ram(0x1C000 + (address & 0x3FFF)),
-        0b011 => Bank::Invalid(address),
+        0b011 => Bank::Invalid,
         0b100 => Bank::Exrom(0x4000 + (address & 0x3FFF)),
         0b101 => Bank::Exrom(0x0000 + (address & 0x3FFF)),
         0b110 => Bank::Exrom(0xC000 + (address & 0x3FFF)),
         0b111 => Bank::Exrom(0x8000 + (address & 0x3FFF)),
+        _ => panic!("This is literally impossible."),
       }
     }
   }
@@ -111,12 +115,12 @@ pub struct MemoryController {
   address: u16,
   bank: u8,
   memory: Memory,
-  io: Io,
+  pub io: Io,
 }
 
-impl Memory {
+impl MemoryController {
   pub fn new() -> MemoryController {
-    Memory {
+    MemoryController {
       control: control::Memory::new(),
       address: 0x0000,
       bank: 0x00,
@@ -143,8 +147,8 @@ impl Memory {
       Bank::Io(address) => Ok(self.io.get_value(address)?),
       Bank::Ram(address) => Ok(self.memory.get_ram(address)?),
       Bank::Rom(address) => Ok(self.memory.get_rom(address)?),
-      Bank::Exrom(address) => Err(Error::InvalidRead("EXROM not implemented yet."),
-      Bank::Invalid => Err(Error::InvalidRead(format!("Can not read from address 0x{:04X} (bank={:08b})", self.address, self.bank)),
+      Bank::Exrom(address) => Err(Error::InvalidRead(String::from("EXROM not implemented yet."))),
+      Bank::Invalid => Err(Error::InvalidRead(format!("Can not read from address 0x{:04X} (bank={:08b})", self.address, self.bank))),
     }
   }
 
@@ -159,14 +163,14 @@ impl Memory {
           self.address, address, self.bank
         ))
       ),
-      Bank::Exrom(address) => Err(Error::InvalidWrite("EXROM not implemented yet."),
-      Bank::Invalid => Err(Error::InvalidWrite(format!("Can not write to address 0x{:04X} (bank={:08b})", self.address, self.bank)),
+      Bank::Exrom(address) => return Err(Error::InvalidWrite(String::from("EXROM not implemented yet."))),
+      Bank::Invalid => return Err(Error::InvalidWrite(format!("Can not write to address 0x{:04X} (bank={:08b})", self.address, self.bank))),
     }
     Ok(())
   }
 }
 
-impl bus::Device<control::Memory> for Memory {
+impl bus::Device<control::Memory> for MemoryController {
   fn update(&mut self, control: control::Memory) -> Result<(), Error> {
     self.control = control;
     Ok(())
@@ -191,25 +195,30 @@ impl bus::Device<control::Memory> for Memory {
   }
 }
 
-impl fmt::Display for Memory {
+impl fmt::Display for MemoryController {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let (value, source) = match Bank::get(self.bank, self.address) {
       Bank::Register => (self.bank, String::from("BANK[     ]")),
       Bank::Io(address) => (self.io.get_value(address).unwrap(), format!(" IO[0x{:04X}]", address)),
       Bank::Ram(address) => (self.memory.get_ram(address).unwrap(), format!("RAM[0x{:04X}]", address)),
       Bank::Rom(address) => (self.memory.get_rom(address).unwrap(), format!("ROM[0x{:04X}]", address)),
-      Bank::Exrom(address) => (0x00, "EXROM[INVD]"),
-      Bank::Invalid => (0x00, "INVALID[--]"),
-    }
-    write!(f, "0x  {:02X} <= 0x{:04X} {} (Data={}, Bank=0b{:08b}) [Memory]", value, self.address, source, self.control.Data, self.bank)
+      Bank::Exrom(address) => (0x00, String::from("EXROM[ BAD]")),
+      Bank::Invalid => (0x00, String::from("INVALID[--]")),
+    };
+    write!(f, "0x  {:02X} <= 0x{:04X} {} Bank=0b{:08b}", value, self.address, source, self.bank)
   }
 }
 
-impl fmt::Debug for Memory {
+impl fmt::Debug for MemoryController {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    for i in 0xFF0..0x1000 {
-      println!("RAM[0x{:04x}] => 0x{:02x}", i, self.memory.get_ram(i).unwrap())
-    }
-    write!(f, "Memory {{No Debug Implementation}}")
+    let (value, source) = match Bank::get(self.bank, self.address) {
+      Bank::Register => (self.bank, String::from("BANK[     ]")),
+      Bank::Io(address) => (self.io.get_value(address).unwrap(), format!(" IO[0x{:04X}]", address)),
+      Bank::Ram(address) => (self.memory.get_ram(address).unwrap(), format!("RAM[0x{:04X}]", address)),
+      Bank::Rom(address) => (self.memory.get_rom(address).unwrap(), format!("ROM[0x{:04X}]", address)),
+      Bank::Exrom(address) => (0x00, String::from("EXROM[ BAD]")),
+      Bank::Invalid => (0x00, String::from("INVALID[--]")),
+    };
+    write!(f, "0x  {:02X} <= 0x{:04X} {} (Data={:?}, Bank=0b{:08b}) [Memory]", value, self.address, source, self.control.Data, self.bank)
   }
 }
