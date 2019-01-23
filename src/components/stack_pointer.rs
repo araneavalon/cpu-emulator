@@ -19,7 +19,7 @@ impl StackPointer {
   pub fn new() -> StackPointer {
     StackPointer {
       control: control::StackPointer::new(),
-      value: MAX, // 10bit, actual range is 0x0C00 to 0x0FFF
+      value: MAX,
     }
   }
 }
@@ -61,6 +61,9 @@ impl bus::Device<control::StackPointer> for StackPointer {
   }
 
   fn clk(&mut self, _state: &bus::State) -> Result<(), Error> {
+    if self.control.Reset {
+      self.value = MAX;
+    }
     Ok(())
   }
 }

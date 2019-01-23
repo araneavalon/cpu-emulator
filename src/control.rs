@@ -260,12 +260,14 @@ impl Trait for ProgramCounter {}
 pub struct StackPointer {
   pub Addr: Write,
   pub Count: IncDec,
+  pub Reset: bool,
 }
 impl StackPointer {
   pub fn new() -> StackPointer {
     StackPointer {
       Addr: Write::None,
       Count: IncDec::None,
+      Reset: false,
     }
   }
 }

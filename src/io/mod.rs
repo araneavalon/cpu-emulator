@@ -21,8 +21,6 @@
 // mod keyboard;
 mod screen;
 
-use std::fmt;
-
 use crate::math::*;
 use crate::error::Error;
 // use crate::io::keyboard::Keyboard;
@@ -53,10 +51,10 @@ impl Io {
   }
 
   pub fn get_value(&self, address: u16) -> Result<u8, Error> {
-    if address <= 0x1EFF {
+    if address < 0x1F00 {
       return Ok(self.screen.get_ram(address)?)
     }
-    match (address & 0x00FF) {
+    match address & 0x00FF {
       // 0x01 => Ok(self.keyboard.get_status()?),
       // 0x02 => Ok(self.keyboard.get_key()?),
       // 0x03 => Ok(self.keyboard.get_char()?),
@@ -71,10 +69,10 @@ impl Io {
   }
 
   pub fn set_value(&mut self, address: u16, value: u8) -> Result<(), Error> {
-    if address <= 0x1EFF {
+    if address <= 0x1F00 {
       return Ok(self.screen.set_ram(address, value)?)
     }
-    match (address & 0x00FF) {
+    match address & 0x00FF {
       0x01 => Err(Error::InvalidWrite(String::from("IO address 0x01 is not writable."))),
       0x02 => Err(Error::InvalidWrite(String::from("IO address 0x02 is not writable."))),
       0x03 => Err(Error::InvalidWrite(String::from("IO address 0x03 is not writable."))),

@@ -1,9 +1,14 @@
 
 use std::fmt;
+use sdl2::pixels::Color;
+use sdl2::render::Canvas;
 
 use crate::math::*;
 use crate::error::Error;
 
+// 0x0000-0x07FF Text (2 screens)
+// 0x0800-0x0FFF Character (256 8x8)
+// 0x1000-0x1EFF Graphics (1 screen)
 
 // 0x004 Cursor Mode EHHH..AB
 //         E   Enable
@@ -84,10 +89,39 @@ impl Screen {
   }
 
 
-  
+  fn graphics_size(&self) -> (i32, i32) {
+    (240, 128)
+  }
+  fn text_size(&self) -> (i32, i32) {
+    (40, 16) // Is 30 when in 8x8 character mode.
+  }
+  fn char_size(&self) -> (i32, i32) {
+    (6, 8) // Is 8x8 when in 8x8 character mode. (Duh.)
+  }
 
-  pub fn get_frame(&self) -> Result<Vec<u8>, Error> {
-    Ok(vec![])
+  pub fn draw<T: sdl2::render::RenderTarget>(&self, canvas: &mut Canvas<T>, bg: Color, fg: Color) -> Result<(), Error> {
+    // ASCII Text mode only for now.
+
+    canvas.set_draw_color(fg);
+    canvas.draw_point((0, 0)).unwrap();
+
+    let (char_w, char_h) = self.char_size();
+    let (columns, rows) = self.text_size();
+    for row in 0..rows {
+      for col in 0..columns {
+        let character = self.ram[(row * columns + col) as usize];
+        for y in 0..char_h {
+          let line = CG_ASCII[((character as i32) * char_h + y) as usize];
+          for x in 0..char_w {
+            if ((line >> (char_w - x - 1)) & 1) != 0 {
+              canvas.draw_point(((col * char_w) + x, (row * char_h) + y)).unwrap(); // TODO ERROR
+            }
+          }
+        }
+      }
+    }
+
+    Ok(())
   }
 }
 

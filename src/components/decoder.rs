@@ -33,7 +33,7 @@ impl fmt::Display for State {
 
 
 #[derive(PartialEq, Eq)]
-pub struct ControlLogic<T: instructions::Set> {
+pub struct Decoder<T: instructions::Set> {
   instructions: Box<T>,
   control: control::Instruction,
   register: u8,
@@ -44,10 +44,10 @@ pub struct ControlLogic<T: instructions::Set> {
   micro: Vec<control::Control>,
 }
 
-impl<T: instructions::Set> ControlLogic<T> {
-  pub fn new(instructions: Box<T>) -> ControlLogic<T> {
+impl<T: instructions::Set> Decoder<T> {
+  pub fn new(instructions: Box<T>) -> Decoder<T> {
     let micro = init_micro(&instructions);
-    ControlLogic {
+    Decoder {
       instructions: instructions,
       control: control::Instruction::new(),
       register: 0x00,
@@ -124,7 +124,7 @@ impl<T: instructions::Set> ControlLogic<T> {
   }
 }
 
-impl<T: instructions::Set> bus::Device<control::Instruction> for ControlLogic<T> {
+impl<T: instructions::Set> bus::Device<control::Instruction> for Decoder<T> {
   fn update(&mut self, control: control::Instruction) -> Result<(), Error> {
     self.control = control;
     Ok(())
@@ -145,7 +145,7 @@ impl<T: instructions::Set> bus::Device<control::Instruction> for ControlLogic<T>
   }
 }
 
-impl<T: instructions::Set> fmt::Display for ControlLogic<T> {
+impl<T: instructions::Set> fmt::Display for Decoder<T> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let address = if let Some(address) = self.control.Vector {
       format!("0x{:04X}", address)
@@ -157,14 +157,14 @@ impl<T: instructions::Set> fmt::Display for ControlLogic<T> {
   }
 }
 
-impl<T: instructions::Set> fmt::Debug for ControlLogic<T> {
+impl<T: instructions::Set> fmt::Debug for Decoder<T> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let address = if let Some(address) = self.control.Vector {
       format!("0x{:04X}", address)
     } else {
       String::from("None")
     };
-    write!(f, "0x  {:02X} [{:?}] (Micro={:?}, Address={}, Data={:?}, Halt={:?}) [ControlLogic]",
+    write!(f, "0x  {:02X} [{:?}] (Micro={:?}, Address={}, Data={:?}, Halt={:?}) [Decoder]",
       self.register, self.state, self.micro.len(), address, self.control.Data, self.control.Halt)
   }
 }

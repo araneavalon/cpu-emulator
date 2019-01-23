@@ -301,6 +301,12 @@ fn interrupt(handler: &[u16; 2], halt: bool) -> Micro {
   Micro::Code(c)
 }
 
+fn srst() -> Micro {
+  let mut c = Control::new();
+  c.StackPointer.Reset = true;
+  Micro::Code(vec![c])
+}
+
 fn set_flag(flag: Flag, value: bool) -> Micro {
   let mut c = Control::new();
   match flag {
@@ -621,7 +627,7 @@ impl Set {
       0b00001100 => ret(),  // Return
       0b00001101 => reti(), // Return from interrupt
       0b00001110 => jmp(None), // JMP addr
-      0b00001111 => nop(), // Undefined
+      0b00001111 => srst(), // Stack Reset
       0b00010000 => jmp(Some((Flag::Z, false))), // JMP NZ,addr
       0b00010001 => jmp(Some((Flag::Z, true))),  // JMP  Z,addr
       0b00010010 => jmp(Some((Flag::C, false))), // JMP NC,addr

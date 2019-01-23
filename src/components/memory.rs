@@ -23,7 +23,9 @@ impl Memory {
         let mut rom = [0x00; ROM_SIZE];
 
         let mut file = String::new();
-        File::open("./rom.asm").unwrap().read_to_string(&mut file).unwrap();
+        File::open(format!("{}/assets/rom.asm", env!("CARGO_MANIFEST_DIR"))).unwrap()
+          .read_to_string(&mut file).unwrap();
+
         let binary = crate::assembler::assemble(&file).unwrap();
         for (address, byte) in binary.iter().enumerate() {
           rom[address] = *byte;

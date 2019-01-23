@@ -1,6 +1,4 @@
 
-use framebuffer::{Framebuffer, KdMode};
-use std::io::{self, Read};
 use std::fmt;
 
 use crate::bus;
@@ -9,21 +7,24 @@ use crate::error::Error;
 use crate::bus::Device;
 
 use crate::instructions;
-use crate::control_logic::ControlLogic;
 
-use crate::program_counter::ProgramCounter;
-use crate::stack_pointer::StackPointer;
-use crate::register::Register;
-use crate::address_register::AddressRegister;
 use crate::memory_controller::MemoryController;
-use crate::flags_register::FlagsRegister;
-use crate::alu::Alu;
+use crate::components::decoder::Decoder;
+use crate::components::program_counter::ProgramCounter;
+use crate::components::stack_pointer::StackPointer;
+use crate::components::register::Register;
+use crate::components::address_register::AddressRegister;
+use crate::components::flags_register::FlagsRegister;
+use crate::components::alu::Alu;
 
 
 pub struct Cpu<T: instructions::Set> {
+  hz: u64,
+  tick_f: std::time::Duration,
+  tick_h: std::time::Duration,
   halt: bool,
 
-  ir: ControlLogic<T>,
+  ir: Decoder<T>,
   pc: ProgramCounter,
   sp: StackPointer,
 
@@ -34,18 +35,21 @@ pub struct Cpu<T: instructions::Set> {
 
   address: AddressRegister,
 
-  memory: MemoryController,
-
   flags: FlagsRegister,
   alu: Alu,
+
+  pub memory: MemoryController,
 }
 
 impl<T: instructions::Set> Cpu<T> {
-  pub fn new(instructions: Box<T>) -> Cpu<T> {
+  pub fn new(hz: u64, instructions: Box<T>) -> Cpu<T> {
     Cpu {
+      hz: hz,
+      tick_f: std::time::Duration::from_nanos(1_000_000_000 / hz),
+      tick_h: std::time::Duration::from_nanos(500_000_000 / hz),
       halt: false,
 
-      ir: ControlLogic::new(instructions),
+      ir: Decoder::new(instructions),
       pc: ProgramCounter::new(),
       sp: StackPointer::new(),
 
@@ -56,10 +60,10 @@ impl<T: instructions::Set> Cpu<T> {
 
       address: AddressRegister::new(),
 
-      memory: MemoryController::new(),
-
       flags: FlagsRegister::new(),
       alu: Alu::new(),
+
+      memory: MemoryController::new(),
     }
   }
 
@@ -149,69 +153,41 @@ impl<T: instructions::Set> Cpu<T> {
   }
 
 
-  fn tick(&mut self, ns: std::time::Duration) -> Result<bool, Error> {
-    let halt = self.update()?;
-    std::thread::sleep(ns);
-
-    let state = self.bus_state()?;
-    self.clk(&state)?;
-    std::thread::sleep(ns);
-
-    Ok(halt)
+  pub fn set_hz(&mut self, hz: u64) {
+    self.hz = hz;
+    self.tick_f = std::time::Duration::from_nanos(1_000_000_000 / hz);
+    self.tick_h = std::time::Duration::from_nanos(500_000_000 / hz);
+  }
+  pub fn hz(&self) -> u64 {
+    self.hz
   }
 
-  fn draw(&self, fb: &mut Framebuffer, scale: u32) -> Result<(), Error> {
-    let frame: Vec<u8> = self.memory.io.screen.get_frame()?;
-    fb.write_frame(&frame);
-    Ok(())
+  pub fn halted(&self) -> bool {
+    self.halt
+  }
+  pub fn resume(&mut self) {
+    self.halt = false;
   }
 
-  fn setup_fb(&self, fb: &mut Framebuffer) -> u32 {
-    // let w = fb.var_screen_info.xres;
-    // let h = fb.var_screen_info.yres;
-    // let scale = std::cmp::min(w / 240, h / 128);
-    // let xo = (w - (240 * scale)) / 2;
-    // let yo = (h - (128 * scale)) / 2;
+  pub fn tick(&mut self) -> Result<bool, Error> {
+    if self.halt {
+      std::thread::sleep(self.tick_f);
+    } else {
+      self.halt = self.update()?;
+      std::thread::sleep(self.tick_h);
 
-    let info = &mut fb.var_screen_info;
-
-    info.bits_per_pixel = 1;
-    info.grayscale = 1;
-
-    Framebuffer::put_var_screeninfo(&fb.device, &info).unwrap();
-
-    0
-  }
-
-  pub fn run(&mut self, hz: u64) -> Result<(), Error> {
-    let ticks_per_frame = hz / 60;
-    let tick = std::time::Duration::from_nanos(1_000_000_000 / hz);
-    let half_tick = std::time::Duration::from_nanos(500_000_000 / 2);
-
-    let stdin = io::stdin();
-
-    let mut fb = Framebuffer::new("/dev/fb0").unwrap();
-    let scale = self.setup_fb(&mut fb);
-    let _ = Framebuffer::set_kd_mode(KdMode::Graphics).unwrap();
-
-    let mut ticks: u64 = 0;
-    loop {
-      self.halt = self.tick(half_tick)?;
-
-      ticks += 1;
-      if ticks >= ticks_per_frame {
-        ticks = 0;
-        self.draw(&mut fb, scale)?;
-      }
-
-      if self.halt {
-        let _ = Framebuffer::set_kd_mode(KdMode::Text).unwrap();
-        println!("Press any key to resume execution...");
-        stdin.read_line(&mut String::new()).unwrap();
-        println!("... execution resumed.");
-        let _ = Framebuffer::set_kd_mode(KdMode::Graphics).unwrap();
-      }
+      let state = self.bus_state()?;
+      self.clk(&state)?;
+      std::thread::sleep(self.tick_h);
     }
+    Ok(self.halt)
+  }
+
+  pub fn run(&mut self, ticks: u64) -> Result<(), Error> {
+    for _ in 0..ticks {
+      self.tick()?;
+    }
+    Ok(())
   }
 }
 

@@ -5,7 +5,7 @@ use crate::bus;
 use crate::control;
 use crate::error::Error;
 
-use crate::memory::Memory;
+use crate::components::memory::Memory;
 use crate::io::Io;
 
 
@@ -46,7 +46,7 @@ use crate::io::Io;
 pub const INTERRUPT_HANDLER: [u16; 2] = [0x0000, 0x0001];
 pub const BREAK_HANDLER: [u16; 2] = [0x0002, 0x0003];
 pub const BANK_ADDRESS: u16  = 0x7F00;
-pub const START_ADDRESS: u16 = 0x2000;
+pub const START_ADDRESS: u16 = 0x4000;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Bank {
@@ -67,7 +67,7 @@ impl Bank {
     } else if address <= 0x1FFF {
       Bank::Ram(address)
     } else if address <= 0x3FFF {
-      Bank::Io(address as u16)
+      Bank::Io((address as u16) & 0x1FFF)
     } else if address <= 0x5FFF {
       match (bank >> 0) & 0b1 {
         0b0 => Bank::Rom(0x0000 + (address & 0x1FFF)),
@@ -147,7 +147,7 @@ impl MemoryController {
       Bank::Io(address) => Ok(self.io.get_value(address)?),
       Bank::Ram(address) => Ok(self.memory.get_ram(address)?),
       Bank::Rom(address) => Ok(self.memory.get_rom(address)?),
-      Bank::Exrom(address) => Err(Error::InvalidRead(String::from("EXROM not implemented yet."))),
+      Bank::Exrom(_address) => Err(Error::InvalidRead(String::from("EXROM not implemented yet."))),
       Bank::Invalid => Err(Error::InvalidRead(format!("Can not read from address 0x{:04X} (bank={:08b})", self.address, self.bank))),
     }
   }
@@ -163,7 +163,7 @@ impl MemoryController {
           self.address, address, self.bank
         ))
       ),
-      Bank::Exrom(address) => return Err(Error::InvalidWrite(String::from("EXROM not implemented yet."))),
+      Bank::Exrom(_address) => return Err(Error::InvalidWrite(String::from("EXROM not implemented yet."))),
       Bank::Invalid => return Err(Error::InvalidWrite(format!("Can not write to address 0x{:04X} (bank={:08b})", self.address, self.bank))),
     }
     Ok(())
@@ -202,7 +202,7 @@ impl fmt::Display for MemoryController {
       Bank::Io(address) => (self.io.get_value(address).unwrap(), format!(" IO[0x{:04X}]", address)),
       Bank::Ram(address) => (self.memory.get_ram(address).unwrap(), format!("RAM[0x{:04X}]", address)),
       Bank::Rom(address) => (self.memory.get_rom(address).unwrap(), format!("ROM[0x{:04X}]", address)),
-      Bank::Exrom(address) => (0x00, String::from("EXROM[ BAD]")),
+      Bank::Exrom(_address) => (0x00, String::from("EXROM[ BAD]")),
       Bank::Invalid => (0x00, String::from("INVALID[--]")),
     };
     write!(f, "0x  {:02X} <= 0x{:04X} {} Bank=0b{:08b}", value, self.address, source, self.bank)
@@ -216,7 +216,7 @@ impl fmt::Debug for MemoryController {
       Bank::Io(address) => (self.io.get_value(address).unwrap(), format!(" IO[0x{:04X}]", address)),
       Bank::Ram(address) => (self.memory.get_ram(address).unwrap(), format!("RAM[0x{:04X}]", address)),
       Bank::Rom(address) => (self.memory.get_rom(address).unwrap(), format!("ROM[0x{:04X}]", address)),
-      Bank::Exrom(address) => (0x00, String::from("EXROM[ BAD]")),
+      Bank::Exrom(_address) => (0x00, String::from("EXROM[ BAD]")),
       Bank::Invalid => (0x00, String::from("INVALID[--]")),
     };
     write!(f, "0x  {:02X} <= 0x{:04X} {} (Data={:?}, Bank=0b{:08b}) [Memory]", value, self.address, source, self.control.Data, self.bank)

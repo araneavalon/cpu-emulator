@@ -1,8 +1,11 @@
 
 use nom::types::CompleteStr;
+use nom::IResult;
 use nom::{
+  InputTakeAtPosition,
+  ErrorKind,
+
   digit,
-  alphanumeric1,
   line_ending,
   not_line_ending,
 };
@@ -42,8 +45,11 @@ named!(word(CompleteStr) -> u16,
   map!(preceded!(tag!("0x"), recognize!(many_m_n!(4, 4, hex_digit))), |s| u16::from_str_radix(&s, 16).unwrap())
 );
 
+fn namechar1(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
+  input.split_at_position1(|item| !item.is_alphanumeric() && item != '_', ErrorKind::AlphaNumeric)
+}
 named!(name(CompleteStr) -> String, map!(
-  recognize!(pair!(char!('.'), alphanumeric1)),
+  recognize!(pair!(char!('.'), namechar1)),
   |s| s.to_string()
 ));
 
@@ -55,9 +61,11 @@ named!(unary_expr(CompleteStr) -> UnaryExpr, alt!(
 ));
 named!(expression(CompleteStr) -> Expression, alt!(
   sp!(do_parse!(
+    char!('[') >>
     lhs: unary_expr >>
     op: one_of!("+-") >>
     rhs: unary_expr >>
+    char!(']') >>
     (match op {
       '+' => Expression::Add(lhs, rhs),
       '-' => Expression::Sub(lhs, rhs),
@@ -99,7 +107,7 @@ named!(indirect_indexed(CompleteStr) -> Address, map!(
 named!(argument(CompleteStr) -> Argument, alt!(
   map!(expression, |b| Argument::Byte(b)) |
   map!(register, |r| Argument::Register(r)) |
-  map!(alt!(direct | indexed | indirect | indirect_indexed), |a| Argument::Address(a))
+  map!(alt!(indirect_indexed | indirect | indexed | direct), |a| Argument::Address(a))
 ));
 
 named!(nop(CompleteStr) -> Op, value!(Op::Nop, sp!(tag_no_case!("NOP"))));
@@ -200,7 +208,7 @@ named!(ld(CompleteStr) -> Op, sp!(alt!(
   ) |
   do_parse!(
     tag_no_case!("LD") >>
-    dest: alt!(direct | indexed | indirect | indirect_indexed) >>
+    dest: alt!(indirect_indexed | indirect | indexed | direct) >>
     char!(',') >>
     src: register >>
     (Op::Ld(Argument::Address(dest), Argument::Register(src)))
@@ -295,7 +303,7 @@ named!(parser(CompleteStr) -> Vec<Token>, sp!(delimited!(
 )));
 
 pub fn parse(input: &str) -> Result<Vec<Token>, Error> {
-  let (remaining, parsed) = parser(CompleteStr(input)).unwrap();
+  let (remaining, parsed) = parser(CompleteStr(input)).unwrap(); // TODO ERROR
   if remaining.len() > 0 {
     Err(Error::IncompleteParse(remaining.to_string()))
   } else {
