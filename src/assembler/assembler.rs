@@ -6,12 +6,21 @@ use super::error::{self, Error};
 use super::tokens::*;
 
 
-impl UnaryExpr {
+enum Value {
+  Number(i32),
+  Word(u16),
+  Byte(u8),
+}
+
+
+impl Operand {
   pub fn resolve(&self, address: u16, names: &HashMap<String, Value>) -> Result<Value, Error> {
     match self {
-      UnaryExpr::Star => Ok(Value::Word(address)),
-      UnaryExpr::Value(value) => Ok(*value),
-      UnaryExpr::Name(name) => {
+      Operand::Star => Ok(Value::Word(address)),
+      Operand::Number(number) => Ok(Value::Number(number)),
+      Operand::Word(word) => Ok(Value::Word(word)),
+      Operand::Byte(byte) => Ok(Value::Byte(byte)),
+      Operand::Name(name) => {
         match names.get(name) {
           Some(value) => Ok(*value),
           None => Err(Error::UnknownName(name.clone())),
@@ -28,28 +37,40 @@ impl Expression {
         match unary.resolve(address, names)? {
           Value::Byte(_) => Err(Error::InvalidType(error::Type::Word, error::Type::Byte)),
           Value::Word(word) => Ok(Value::Byte((word >> 8) as u8)),
+          Value::Number(number) => Ok(Value::Byte(((number as u16) >> 8) as u8)),
         }
       },
       Expression::Low(unary) => {
         match unary.resolve(address, names)? {
           Value::Byte(_) => Err(Error::InvalidType(error::Type::Word, error::Type::Byte)),
           Value::Word(word) => Ok(Value::Byte(word as u8)),
+          Value::Number(number) => Ok(Value::Byte(number as u8)),
         }
       },
       Expression::Add(lhs, rhs) => {
         match (lhs.resolve(address, names)?, rhs.resolve(address, names)?) {
-          (Value::Word(lhs), Value::Word(rhs)) => Ok(Value::Word(lhs + rhs)),
-          (Value::Word(lhs), Value::Byte(rhs)) => Ok(Value::Word(lhs + (rhs as u16))),
-          (Value::Byte(lhs), Value::Word(rhs)) => Ok(Value::Word((lhs as u16) + rhs)),
-          (Value::Byte(lhs), Value::Byte(rhs)) => Ok(Value::Byte(lhs + rhs)),
+          (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(       lhs + rhs)),
+          (Value::Number(lhs), Value::Word(rhs))   => Ok(Value::Word((lhs as u16) + rhs)),
+          (Value::Number(lhs), Value::Byte(rhs))   => Ok(Value::Byte((lhs as u8)  + rhs)),
+          (Value::Word(lhs),   Value::Number(rhs)) => Ok(Value::Word(         lhs + (rhs as u16))),
+          (Value::Word(lhs),   Value::Word(rhs))   => Ok(Value::Word(         lhs + rhs)),
+          (Value::Word(lhs),   Value::Byte(rhs))   => Ok(Value::Word(         lhs + (rhs as u16))),
+          (Value::Byte(lhs),   Value::Number(rhs)) => Ok(Value::Byte(         lhs + (rhs as u8))),
+          (Value::Byte(lhs),   Value::Word(rhs))   => Ok(Value::Word((lhs as u16) + rhs)),
+          (Value::Byte(lhs),   Value::Byte(rhs))   => Ok(Value::Byte(         lhs + rhs)),
         }
       },
       Expression::Sub(lhs, rhs) => {
         match (lhs.resolve(address, names)?, rhs.resolve(address, names)?) {
-          (Value::Word(lhs), Value::Word(rhs)) => Ok(Value::Word(lhs - rhs)),
-          (Value::Word(lhs), Value::Byte(rhs)) => Ok(Value::Word(lhs - (rhs as u16))),
-          (Value::Byte(lhs), Value::Word(rhs)) => Ok(Value::Word((lhs as u16) - rhs)),
-          (Value::Byte(lhs), Value::Byte(rhs)) => Ok(Value::Byte(lhs - rhs)),
+          (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(       lhs - rhs)),
+          (Value::Number(lhs), Value::Word(rhs))   => Ok(Value::Word((lhs as u16) - rhs)),
+          (Value::Number(lhs), Value::Byte(rhs))   => Ok(Value::Byte((lhs as u8)  - rhs)),
+          (Value::Word(lhs),   Value::Number(rhs)) => Ok(Value::Word(         lhs - (rhs as u16))),
+          (Value::Word(lhs),   Value::Word(rhs))   => Ok(Value::Word(         lhs - rhs)),
+          (Value::Word(lhs),   Value::Byte(rhs))   => Ok(Value::Word(         lhs - (rhs as u16))),
+          (Value::Byte(lhs),   Value::Number(rhs)) => Ok(Value::Byte(         lhs - (rhs as u8))),
+          (Value::Byte(lhs),   Value::Word(rhs))   => Ok(Value::Word((lhs as u16) - rhs)),
+          (Value::Byte(lhs),   Value::Byte(rhs))   => Ok(Value::Byte(         lhs - rhs)),
         }
       },
     }
@@ -57,6 +78,7 @@ impl Expression {
 
   pub fn resolve_word(&self, address: u16, names: &HashMap<String, Value>) -> Result<u16, Error> {
     match self.resolve(address, names)? {
+      Value::Number(number) => Ok(number as u16),
       Value::Word(word) => Ok(word),
       Value::Byte(_) => Err(Error::InvalidType(error::Type::Word, error::Type::Byte)),
     }
@@ -64,6 +86,7 @@ impl Expression {
 
   pub fn resolve_byte(&self, address: u16, names: &HashMap<String, Value>) -> Result<u8, Error> {
     match self.resolve(address, names)? {
+      Value::Number(number) => Ok(number as u8),
       Value::Byte(byte) => Ok(byte),
       Value::Word(_) => Err(Error::InvalidType(error::Type::Byte, error::Type::Word)),
     }
@@ -97,7 +120,7 @@ impl Address {
       Address::Indirect(expr) |
       Address::Indexed(expr, _) |
       Address::IndirectIndexed(expr, _) => {
-        *expr = Expression::Unary(UnaryExpr::Value(Value::Word(expr.resolve_word(address, names)?)));
+        *expr = Expression::Unary(Operand::Word(expr.resolve_word(address, names)?));
       },
     }
     Ok(())

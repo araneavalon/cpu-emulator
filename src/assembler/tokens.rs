@@ -1,23 +1,19 @@
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Value {
-  Byte(u8),
-  Word(u16),
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum UnaryExpr {
+pub enum Operand {
   Star,
-  Value(Value),
+  Number(i32),
+  Word(u16),
+  Byte(u8),
   Name(String),
 }
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression {
-  Add(UnaryExpr, UnaryExpr),
-  Sub(UnaryExpr, UnaryExpr),
-  High(UnaryExpr),
-  Low(UnaryExpr),
-  Unary(UnaryExpr),
+  Add(Operand, Operand),
+  Sub(Operand, Operand),
+  High(Operand),
+  Low(Operand),
+  Unary(Operand),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
