@@ -9,13 +9,12 @@ mod assembler;
 use crate::math::*;
 use self::error::Error;
 use self::tokens::Token;
-use self::tokens::Value;
 use self::tokens::Directive;
 
 
 pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
   let mut tokens: Vec<Token> = parser::parse(input)?;
-  let mut names: HashMap<String, Value> = HashMap::new();
+  let mut names: HashMap<String, u16> = HashMap::new();
   let mut out: Vec<u8> = Vec::new();
 
   println!("");
@@ -34,7 +33,7 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
         }
       },
       Token::Label(label) => {
-        names.insert(label.clone(), Value::Word(address));
+        names.insert(label.clone(), address);
       },
       Token::Op(op) => address += op.len(),
     }
@@ -62,7 +61,7 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
           },
           Directive::Word(words) => {
             for expr in words.iter() {
-              let word = expr.resolve_word((out.len() as u16) + start, &names)?;
+              let word = expr.word((out.len() as u16) + start, &names)?;
               println!("Word: {}", word);
               let [h, l] = to_bytes(word);
               out.push(h);
@@ -71,19 +70,19 @@ pub fn assemble(input: &str) -> Result<Vec<u8>, Error> {
           },
           Directive::Byte(bytes) => {
             for expr in bytes.iter() {
-              let byte = expr.resolve_byte((out.len() as u16) + start, &names)?;
+              let byte = expr.byte((out.len() as u16) + start, &names)?;
               out.push(byte);
             }
           },
           Directive::Define(name, expr) => {
-            names.insert(name.clone(), expr.resolve((out.len() as u16) + start, &names)?);
+            names.insert(name.clone(), expr.word(out.len() as u16 + start, &names)?);
           },
         }
       },
       Token::Label(_) => (), // Nothing to do with these anymore.
       Token::Op(op) => {
-        op.resolve(out.len() as u16, &names)?;
-        op.assemble(&mut out)?;
+        let address = out.len() as u16;
+        op.assemble(&mut out, address, &names)?;
       },
     }
   }

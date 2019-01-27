@@ -6,6 +6,7 @@ use crate::error::Error;
 
 use crate::bus::Device;
 
+use crate::control;
 use crate::instructions;
 
 use crate::memory_controller::MemoryController;
@@ -160,6 +161,12 @@ impl<T: instructions::Set> Cpu<T> {
   }
   pub fn hz(&self) -> u64 {
     self.hz
+  }
+
+  pub fn interrupt(&mut self) {
+    if self.flags.get_flags()[&control::Flag::I] {
+      self.ir.set_interrupt();
+    }
   }
 
   pub fn halted(&self) -> bool {

@@ -1,8 +1,6 @@
 
 use nom::types::CompleteStr;
 use nom::{
-  is_digit,
-  is_hex_digit,
   line_ending,
   not_line_ending,
 };
@@ -11,16 +9,19 @@ use crate::assembler::error::Error;
 use crate::assembler::tokens::*;
 
 
-named!(sp0(CompleteStr) -> CompleteStr, take_until_either_and_consume!(" \t"));
-named!(sp1(CompleteStr) -> CompleteStr, take_until_either_and_consume1!(" \t"));
-
-fn is_bin_digit(chr: char) -> bool {
-  chr == '0' || chr == '1'
+fn is_space(chr: char) -> bool {
+  chr == ' ' || chr == '\t'
 }
-named!(number(CompleteStr) -> i32, alt!(
-  preceded!(tag!("0x"), take_while1!(is_hex_digit)) => { |s: &str| i32::from_str_radix(s, 16).unwrap() } |
-  preceded!(tag!("0b"), take_while1!(is_bin_digit)) => { |s: &str| i32::from_str_radix(s, 2).unwrap() } |
-  recognize!(pair!(opt!(one_of!("+-")), take_while1!(is_digit))) => { |s: CompleteStr| i32::from_str_radix(&s, 10).unwrap() }
+named!(sp0(CompleteStr) -> CompleteStr, take_while!(is_space));
+named!(sp1(CompleteStr) -> CompleteStr, take_while1!(is_space));
+
+fn is_hex_digit(chr: char) -> bool { chr.is_digit(16) }
+fn is_bin_digit(chr: char) -> bool { chr.is_digit(2) }
+fn is_digit(chr: char) -> bool { chr.is_digit(10) }
+named!(number(CompleteStr) -> u16, alt!(
+  preceded!(tag!("0x"), take_while1!(is_hex_digit)) => { |s: CompleteStr| u16::from_str_radix(&s, 16).unwrap() } |
+  preceded!(tag!("0b"), take_while1!(is_bin_digit)) => { |s: CompleteStr| u16::from_str_radix(&s, 2).unwrap() } |
+  recognize!(pair!(opt!(one_of!("+-")), take_while1!(is_digit))) => { |s: CompleteStr| i32::from_str_radix(&s, 10).unwrap() as u16 }
 ));
 
 fn is_name_char(chr: char) -> bool {
@@ -241,7 +242,7 @@ named!(byte_directive(CompleteStr) -> Directive, do_parse!(
     expression => { |e| -> Vec<Expression> { vec![e] } } |
     string => { |s: String| -> Vec<Expression> {
       s.into_bytes().into_iter()
-        .map(|c| Expression::Unary(Operand::Number(c as i32)))
+        .map(|c| Expression::Unary(Operand::Number(c as u16)))
         .collect()
     } }
   ), sp0)) >>
@@ -249,7 +250,9 @@ named!(byte_directive(CompleteStr) -> Directive, do_parse!(
 ));
 named!(define(CompleteStr) -> Directive, do_parse!(
   tag_no_case!("#define") >> sp1 >>
-  n: name >> sp0 >> one_of!("=") >> sp0 >> expr: expression >>
+  n: name >>
+  sp0 >> one_of!("=") >> sp0 >>
+  expr: expression >>
   (Directive::Define(n, expr))
 ));
 named!(directive(CompleteStr) -> Token, map!(
@@ -272,18 +275,24 @@ named!(instruction(CompleteStr) -> Token, map!(
 
 named!(line(CompleteStr) -> Vec<Token>, terminated!(
   alt!(
-    comment     => { |_| vec![] } |
-    label       => { |l| vec![l] } |
     directive   => { |d| vec![d] } |
     instruction => { |i| vec![i] } |
+    label       => { |l| vec![l] } |
     do_parse!(l: label >> sp1 >> d: directive >> ((l, d))) => { |(l, d)| vec![l, d] } |
-    do_parse!(l: label >> sp1 >> i: instruction >> ((l, i))) => { |(l, i)| vec![l, i] }
+    do_parse!(l: label >> sp1 >> i: instruction >> ((l, i))) => { |(l, i)| vec![l, i] } |
+    comment     => { |_| vec![] }
   ),
   opt!(pair!(sp0, comment))
 ));
 
-named!(line_sep(CompleteStr) -> CompleteStr,
-  recognize!(many1!(pair!(line_ending, sp0)))
+fn is_line_sep(chr: char) -> bool {
+  chr == '\r' || chr == '\n'
+}
+fn is_line_sep_sp(chr: char) -> bool {
+  chr == ' ' || chr == '\t' || chr == '\r' || chr == '\n'
+}
+named!(line_sep(CompleteStr) -> CompleteStr, 
+  recognize!(pair!(take_while1!(is_line_sep), take_while!(is_line_sep_sp)))
 );
 
 named!(parser(CompleteStr) -> Vec<Token>, delimited!(

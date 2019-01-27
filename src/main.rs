@@ -31,7 +31,7 @@ use crate::instructions::set::Set;
 fn main() {
   let hz: u64 = match option_env!("CLK") {
     Some(v) => u64::from_str_radix(v, 10).unwrap(),
-    None => 5,
+    None => 1_000_000,
   };
   println!("CLK: {}", hz);
 

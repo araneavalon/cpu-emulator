@@ -38,7 +38,13 @@ pub fn run<T: instructions::Set>(mut cpu: Cpu<T>) -> Result<(), Error> {
 		for event in event_pump.poll_iter() {
 			match event {
 				Event::Quit { .. } |
-				Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'running,
+				Event::KeyDown { keycode: Some(Keycode::ScrollLock), .. } => break 'running,
+				Event::KeyDown { keycode: Some(key), keymod, .. } => {
+					if cpu.memory.io.keyboard.pressed(key, keymod) {
+						println!("Interrupt Keypress: {}", key);
+						cpu.interrupt();
+					}
+				},
 				_ => (),
 			}
 		}
@@ -49,7 +55,14 @@ pub fn run<T: instructions::Set>(mut cpu: Cpu<T>) -> Result<(), Error> {
 		cpu.memory.io.screen.draw(&mut canvas, bg, fg)?;
 
 		canvas.present();
+
+		if cpu.halted() {
+			break 'running;
+		}
 	}
+
+	println!("End!");
+	std::io::stdin().read_line(&mut String::new());
 
 	Ok(())
 }

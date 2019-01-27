@@ -103,7 +103,6 @@ impl Screen {
     // ASCII Text mode only for now.
 
     canvas.set_draw_color(fg);
-    canvas.draw_point((0, 0)).unwrap();
 
     let (char_w, char_h) = self.char_size();
     let (columns, rows) = self.text_size();

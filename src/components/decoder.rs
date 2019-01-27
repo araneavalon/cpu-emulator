@@ -7,13 +7,6 @@ use crate::instructions;
 use crate::error::Error;
 
 
-fn init_micro<T: instructions::Set>(instructions: &Box<T>) -> Vec<control::Control> {
-  let mut c = control::Control::new();
-  c.Instruction.Vector = Some(instructions.start());
-  c.ProgramCounter.Addr = control::ReadWrite::Read;
-  vec![c]
-}
-
 #[derive(Debug, PartialEq, Eq)]
 enum State {
   Init,
@@ -39,6 +32,7 @@ pub struct Decoder<T: instructions::Set> {
   register: u8,
 
   state: State,
+  interrupt: bool,
   pc: Option<control::IncDec>,
   sp: Option<control::IncDec>,
   micro: Vec<control::Control>,
@@ -46,16 +40,17 @@ pub struct Decoder<T: instructions::Set> {
 
 impl<T: instructions::Set> Decoder<T> {
   pub fn new(instructions: Box<T>) -> Decoder<T> {
-    let micro = init_micro(&instructions);
+    let init_micro = instructions.init();
     Decoder {
       instructions: instructions,
       control: control::Instruction::new(),
       register: 0x00,
 
       state: State::Init,
+      interrupt: false,
       pc: None,
       sp: None,
-      micro: micro,
+      micro: init_micro,
     }
   }
 
@@ -102,7 +97,12 @@ impl<T: instructions::Set> Decoder<T> {
         State::Fetch => panic!("Empty fetch state can not occur at this point."),
         State::Init |
         State::Run(_) => {
-          self.set_micro(self.instructions.fetch(), flags);
+          if self.interrupt {
+            self.set_micro(self.instructions.interrupt(), flags);
+          } else {
+            self.set_micro(self.instructions.fetch(), flags);
+          }
+
           if let Some(pc) = self.pc {
             self.micro[0].ProgramCounter.Count = pc;
             self.pc = None;
@@ -111,12 +111,22 @@ impl<T: instructions::Set> Decoder<T> {
             self.micro[0].StackPointer.Count = sp;
             self.sp = None;
           }
-          State::Fetch
+
+          if self.interrupt {
+            self.interrupt = false;
+            State::Run(0)
+          } else {
+            State::Fetch
+          }
         },
       };
     }
 
     self.micro.remove(0)
+  }
+
+  pub fn set_interrupt(&mut self) {
+    self.interrupt = true;
   }
 
   pub fn halt(&self) -> bool {

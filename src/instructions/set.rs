@@ -894,8 +894,12 @@ impl Set {
 }
 
 impl instructions::Set for Set {
-  fn start(&self) -> u16 {
-    crate::memory_controller::START_ADDRESS
+  fn init(&self) -> Vec<Control> {
+    let mut c = Control::new();
+    c.Instruction.Vector = Some(crate::memory_controller::START_ADDRESS);
+    c.ProgramCounter.Addr = ReadWrite::Read;
+    c.FlagsRegister.I = Some(true);
+    vec![c]
   }
 
   fn fetch(&self) -> Micro {

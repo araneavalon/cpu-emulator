@@ -2,9 +2,7 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Operand {
   Star,
-  Number(i32),
-  Word(u16),
-  Byte(u8),
+  Number(u16),
   Name(String),
 }
 #[derive(Debug, PartialEq, Eq, Clone)]

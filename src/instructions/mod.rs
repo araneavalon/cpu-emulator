@@ -5,7 +5,7 @@ use crate::control::{Control, Flag};
 
 
 pub trait Set {
-	fn start(&self) -> u16;
+	fn init(&self) -> Vec<Control>;
   fn fetch(&self) -> Micro;
   fn get(&self, op: u8) -> Micro;
   fn interrupt(&self) -> Micro;
