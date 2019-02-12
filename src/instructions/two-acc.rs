@@ -151,7 +151,7 @@ fn addr() -> (usize, Vec<Control>) {
   c[1].AddressRegister.DataL = Read::Read;
 
   c[2].ProgramCounter.Count = IncDec::Increment;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
 
   (2, c)
 }
@@ -170,7 +170,7 @@ fn idx_addr(index: &Register) -> (usize, Vec<Control>) {
   c[2].ProgramCounter.Count = IncDec::Increment;
   set_register(&mut c[2], index, ReadWrite::Write);
   c[2].Alu.Temp = Read::Read;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
   c[2].Alu.Input = AluInput::Addr;
   alu_add(&mut c[2], false, false);
   c[2].Alu.Output = Write::Write;
@@ -192,7 +192,7 @@ fn ind_addr() -> (usize, Vec<Control>) {
   c[1].AddressRegister.DataL = Read::Read;
 
   c[2].ProgramCounter.Count = IncDec::Increment;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
   c[2].Alu.Input = AluInput::Addr;
   alu_inc(&mut c[2]);
   c[2].Alu.Output = Write::Write;
@@ -203,7 +203,7 @@ fn ind_addr() -> (usize, Vec<Control>) {
   c[3].Memory.Data = ReadWrite::Write;
   c[3].AddressRegister.DataL = Read::Read;
 
-  c[4].AddressRegister.Addr = ReadWrite::Write;
+  c[4].AddressRegister.Addr = Write::Write;
 
   (4, c)
 }
@@ -222,7 +222,7 @@ fn ind_idx_addr(index: &Register) -> (usize, Vec<Control>) {
   c[2].ProgramCounter.Count = IncDec::Increment;
   set_register(&mut c[2], index, ReadWrite::Write);
   c[2].Alu.Temp = Read::Read;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
   c[2].Alu.Input = AluInput::Addr;
   alu_add(&mut c[2], false, false);
   c[2].Alu.Output = Write::Write;
@@ -233,7 +233,7 @@ fn ind_idx_addr(index: &Register) -> (usize, Vec<Control>) {
   c[3].Memory.Data = ReadWrite::Write;
   c[3].AddressRegister.DataL = Read::Read;
 
-  c[4].AddressRegister.Addr = ReadWrite::Write;
+  c[4].AddressRegister.Addr = Write::Write;
 
   (4, c)
 }
@@ -281,7 +281,7 @@ fn interrupt(handler: &[u16; 2], halt: bool) -> Micro {
   c[4].AddressRegister.DataL = Read::Read;
 
   c.push(Control::new());
-  c[5].AddressRegister.Addr = ReadWrite::Write;
+  c[5].AddressRegister.Addr = Write::Write;
   c[5].Alu.Input = AluInput::Addr;
   alu_inc(&mut c[5]);
   c[5].Alu.Output = Write::Write;
@@ -294,11 +294,17 @@ fn interrupt(handler: &[u16; 2], halt: bool) -> Micro {
   c[6].AddressRegister.DataL = Read::Read;
 
   c.push(Control::new());
-  c[7].AddressRegister.Addr = ReadWrite::Write;
+  c[7].AddressRegister.Addr = Write::Write;
   c[7].ProgramCounter.Addr = ReadWrite::Read;
   c[7].Instruction.Halt = halt;
 
   Micro::Code(c)
+}
+
+fn srst() -> Micro {
+  let mut c = Control::new();
+  c.StackPointer.Reset = true;
+  Micro::Code(vec![c])
 }
 
 fn set_flag(flag: Flag, value: bool) -> Micro {
@@ -324,7 +330,7 @@ fn ret() -> Micro {
   c[1].Memory.Data = ReadWrite::Write;
   c[1].AddressRegister.DataL = Read::Read;
 
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
   c[2].ProgramCounter.Addr = ReadWrite::Read;
 
   Micro::Code(c)
@@ -348,7 +354,7 @@ fn reti() -> Micro {
   c[2].Memory.Data = ReadWrite::Write;
   c[2].FlagsRegister.Data = ReadWrite::Read;
 
-  c[3].AddressRegister.Addr = ReadWrite::Write;
+  c[3].AddressRegister.Addr = Write::Write;
   c[3].ProgramCounter.Addr = ReadWrite::Read;
 
   Micro::Code(c)
@@ -380,7 +386,7 @@ fn call(target: Address) -> Micro {
   Micro::Code(c)
 }
 
-fn jmp_absolute(condition: Option<(Flag, bool)>) -> Micro {
+fn jmp(condition: Option<(Flag, bool)>) -> Micro {
   let mut c = vec![Control::new(), Control::new(), Control::new()];
 
   c[0].ProgramCounter.Addr = ReadWrite::Write;
@@ -393,7 +399,7 @@ fn jmp_absolute(condition: Option<(Flag, bool)>) -> Micro {
   c[1].AddressRegister.DataL = Read::Read;
 
   c[2].ProgramCounter.Count = IncDec::Increment;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
+  c[2].AddressRegister.Addr = Write::Write;
   c[2].ProgramCounter.Addr = ReadWrite::Read;
 
   match condition {
@@ -410,91 +416,6 @@ fn jmp_absolute(condition: Option<(Flag, bool)>) -> Micro {
       }
     },
   }
-}
-
-fn jmp_offset(condition: Option<(Flag, bool)>) -> Micro {
-  let mut c = vec![Control::new(), Control::new(), Control::new()];
-
-  c[0].ProgramCounter.Addr = ReadWrite::Write;
-  c[0].Memory.Data = ReadWrite::Read;
-  c[0].Alu.Temp = Read::Read;
-
-  c[1].ProgramCounter.Count = IncDec::Increment;
-  c[1].ProgramCounter.Addr = ReadWrite::Write;
-  c[1].Alu.Input = AluInput::Addr;
-  alu_add(&mut c[1], false, true);
-  c[1].Alu.Output = Write::Write;
-
-  c[2].Alu.Addr = Write::Write;
-  c[2].ProgramCounter.Addr = ReadWrite::Read;
-
-  match condition {
-    None => Micro::Code(c),
-    Some((flag, value)) => {
-      let mut n = vec![Control::new(), Control::new()];
-      n[1].ProgramCounter.Count = IncDec::Increment;
-
-      if value {
-        Micro::Branch(flag, Box::new(Micro::Code(c)), Box::new(Micro::Compress(n)))
-      } else {
-        Micro::Branch(flag, Box::new(Micro::Compress(n)), Box::new(Micro::Code(c)))
-      }
-    },
-  }
-}
-
-fn exchange_ab() -> Micro {
-  // TODO
-}
-
-fn ld_s_addr() -> Micro {
-  let mut c = vec![Control::new(), Control::new(), Control::new()];
-
-  c[0].ProgramCounter.Addr = ReadWrite::Write;
-  c[0].Memory.Data = ReadWrite::Read;
-  c[0].AddressRegister.DataH = Read::Read;
-
-  c[1].ProgramCounter.Count = IncDec::Increment;
-  c[1].ProgramCounter.Addr = ReadWrite::Write;
-  c[1].Memory.Data = ReadWrite::Read;
-  c[1].AddressRegister.DataL = Read::Read;
-
-  c[2].ProgramCounter.Count = IncDec::Increment;
-  c[2].AddressRegister.Addr = ReadWrite::Write;
-  c[2].StackPointer.Addr = ReadWrite::Read;
-
-  Micro::Code(c)
-}
-fn ld_so_byte() -> Micro {
-  let mut c = vec![Control::new(), Control::new()];
-
-  c[0].ProgramCounter.Addr = ReadWrite::Write;
-  c[0].Memory.Data = ReadWrite::Read;
-  c[0].StackPointer.Offset = ReadWrite::Read;
-
-  c[1].ProgramCounter.Count = IncDec::Increment;
-
-  Micro::Compress(c)
-}
-fn ld_s_ba() -> Micro {
-  let mut c = vec![Control::new(), Control::new()];
-
-  set_register(&mut c[0], Register::B, ReadWrite::Write);
-  c[0].StackPointer.DataH = ReadWrite::Read;
-
-  set_register(&mut c[1], Register::A, ReadWrite::Write);
-  c[1].StackPointer.DataL = ReadWrite::Read;
-
-  Micro::Code(c)
-}
-fn ld_ba_s() -> Micro {
-  let mut c = vec![Control::new(), Control::new()];
-
-  c[0].StackPointer.DataH = ReadWrite::Write;
-  set_register(&mut c[0], Register::B, ReadWrite::Read);
-
-  c[1].StackPointer.DataL = ReadWrite::Write;
-  set_register(&mut c[1], Register::A, ReadWrite::Read);
 }
 
 fn operation(register: Register, operation: Operation, argument: Argument) -> Micro {
@@ -589,7 +510,7 @@ fn unary(register: Register, operation: Unary) -> Micro {
     Unary::RotateRightCarry => alu_rotate(&mut c[0], AluRotateDirection::Right, true),
     Unary::RotateLeft => alu_rotate(&mut c[0], AluRotateDirection::Left, false),
     Unary::RotateLeftCarry => alu_rotate(&mut c[0], AluRotateDirection::Left, true),
-    _ => panic!("Use unary_t for the NOT and NEG operators."),
+    Unary::Not | Unary::Negate => panic!("Use unary_t for the NOT and NEG operators."),
   }
   c[0].Alu.Output = Write::Write;
   c[0].FlagsRegister.Update = Read::Read;
@@ -615,37 +536,6 @@ fn unary_t(register: Register, operation: Unary) -> Micro {
 
   c[2].Alu.Data = Write::Write;
   set_register(&mut c[2], &register, ReadWrite::Read);
-
-  Micro::Code(c)
-}
-fn unary_m(address: Address, operation: Unary) -> Micro {
-  let (i, mut c) = match a {
-    Address::Address => addr(),
-    Address::IndexedAddress(index) => {
-      let (i, mut c) = idx_addr(&index);
-
-      c[i].AddressRegister.Addr = ReadWrite::Read;
-
-      c.push(Control::new());
-      c[i+1].AddressRegister.Addr = ReadWrite::Write;
-
-      (i+1, c)
-    },
-    Address::IndirectAddress => ind_addr(),
-    Address::IndirectIndexedAddress(index) => ind_idx_addr(&index),
-  };
-
-  match operation {
-    Unary::Increment => alu_inc(&mut c[i]),
-    Unary::Decrement => alu_dec(&mut c[i]),
-  }
-  c[i].Alu.Output = Write::Write;
-  c[i].FlagsRegister.Update = Read::Read;
-
-  c.push(Control::new());
-  c[i+1].Alu.Data = Write::Write;
-  c[i+1].AddressRegister.Addr = ReadWrite::Write;
-  c[i+1].Memory.Data = ReadWrite::Read;
 
   Micro::Code(c)
 }

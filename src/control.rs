@@ -184,14 +184,14 @@ impl Trait for Register {}
 pub struct AddressRegister {
   pub DataH: Read,
   pub DataL: Read,
-  pub Addr: Write,
+  pub Addr: ReadWrite,
 }
 impl AddressRegister {
   pub fn new() -> AddressRegister {
     AddressRegister {
       DataH: Read::None,
       DataL: Read::None,
-      Addr: Write::None,
+      Addr: ReadWrite::None,
     }
   }
 }
