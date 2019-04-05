@@ -1,182 +1,101 @@
 
-use std::collections::HashMap;
-use std::fmt;
-
-use crate::math::*;
-use crate::bus;
-use crate::control;
-use crate::control::{Flags, Flag};
-use crate::error::Error;
+use crate::control::{
+  Control,
+  AluMode,
+};
+use crate::components::flags::Flag;
+use crate::components::BusComponent;
 
 
-fn sign(v: u8) -> bool {
-  (v & 0x80) != 0
-}
-fn overflow(a: u8, b: u8, r: u8) -> bool {
-  (sign(a) == sign(b)) && (sign(a) != sign(r))
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Alu {
-  control: control::Alu,
-  flags: Flags,
-  t_value: u8,
-  o_value: [u8; 2],
+  control: Control,
+  t: [u16; 2],
 }
 
 impl Alu {
   pub fn new() -> Alu {
     Alu {
-      control: control::Alu::new(),
-      flags: HashMap::new(),
-      t_value: 0x00,
-      o_value: [0x00, 0x00],
+      control: Control::new(),
+      t: [0x0000; 2],
     }
   }
 
-  pub fn get_flags(&self) -> Flags {
-    self.flags.clone()
+  fn flags(&self, zero: bool, sign: bool, carry: bool, overflow: bool) -> [bool; 8] {
+    let mut flags = [false; 8];
+    flags[Flag::Zero as usize] = zero;
+    flags[Flag::Sign as usize] = sign;
+    flags[Flag::Carry as usize] = carry;
+    flags[Flag::Overflow as usize] = overflow;
+    flags
   }
 
-  fn input_t(&self) -> Result<u8, Error> {
-    use crate::control::AluSelect as Select;
-    match self.control.TempSelect {
-      Select::Zero   => Ok(0x00),
-      Select::One    => Ok(0xFF),
-      Select::Value  => Ok(self.t_value),
-      Select::Invert => Ok(!self.t_value),
-    }
-  }
-
-  fn input_i(&self, state: &bus::State) -> Result<u16, Error> {
-    use crate::control::AluInput as Select;
-    match self.control.Input {
-      Select::Zero => Ok(0x0000),
-      Select::Data => Ok(state.read_data()? as u16),
-      Select::Addr => Ok(state.read_addr()?),
-    }
-  }
-
-  fn calculate_add(&self, state: &bus::State, signed: bool, carry_select: control::AluSelect) -> Result<([u8; 2], Flags), Error> {
-    let temp: u32 = if signed {
-      sign_extend(self.input_t()?) as u32
+  fn shift(&self) -> (u16, [bool; 8]) {
+    let (value, carry) = if self.control.alu.direction {
+      if self.control.alu.word {
+        (self.t[1] << 1, (self.t[1] & 0x8000) != 0)
+      } else {
+        let v = (self.t[1] as u8) << 1;
+        ((0xFF00 * ((v >> 7) as u16)) | (v as u16), (self.t[1] & 0x0080) != 0)
+      }
     } else {
-      self.input_t()? as u32
+      let value = match (self.control.alu.word, self.control.alu.extend) {
+        (true, true)   => ((self.t[1] as i16) >> 1) as u16,
+        (true, false)  => self.t[1] >> 1,
+        (false, true)  => ((self.t[1] as i8) >> 1) as u16,
+        (false, false) => ((self.t[1] as u8) >> 1) as u16,
+      };
+      (value, (self.t[1] & 0x0001) != 0)
     };
-    let input: u32 = self.input_i(state)? as u32;
-    let carry: u32 = match carry_select {
-      control::AluSelect::Zero   => 0,
-      control::AluSelect::One    => 1,
-      control::AluSelect::Value  => self.control.Flags[&Flag::C] as u32,
-      control::AluSelect::Invert => (!self.control.Flags[&Flag::C]) as u32,
-    };
-
-    let result = input + temp + carry;
-    let carry_out = if self.control.Input == control::AluInput::Zero {
-      false
-    } else if (carry_select == control::AluSelect::One || carry_select == control::AluSelect::Invert) &&
-        self.control.TempSelect != control::AluSelect::Zero {
-      result & 0xFFFFFF00 == 0
-    } else {
-      result & 0xFFFFFF00 != 0
-    };
-    let result = to_bytes(result as u16);
-
-    Ok((result, hash_map!{
-      Flag::Z => result[1] == 0,
-      Flag::C => carry_out,
-      Flag::V => overflow(temp as u8, input as u8, result[1]),
-      Flag::S => sign(result[1]),
-    }))
+    (value, self.flags(value == 0, (value as i16) < 0, carry, false))
   }
 
-  fn calculate_bitwise<F>(&self, state: &bus::State, func: F) -> Result<([u8; 2], Flags), Error>
-    where F: Fn(u8, u8) -> u8
-  {
-    let temp = self.input_t()?;
-    let input = self.input_i(state)? as u8;
-    let result = func(temp, input);
-    Ok(([0x00, result], hash_map!{
-      Flag::Z => result == 0,
-      Flag::C => false,
-      Flag::V => overflow(temp, input, result),
-      Flag::S => sign(result),
-    }))
+  fn binary<F>(&self, func: F) -> (u16, [bool; 8])
+  where F: Fn(i32, i32, i32) -> i32 {
+    let t0 = (self.t[0] & if self.control.alu.t0_zero { 0x0000 } else { 0xFFFF }) as i32;
+    let t1 = (self.t[1] ^ if self.control.alu.t1_invert { 0xFFFF } else { 0x0000 }) as i32;
+    let c = self.control.alu.carry_invert as i32;
+
+    let value = func(t0, t1, c);
+    let carry = self.control.alu.carry_invert ^ (value > (u16::max_value() as i32));
+    let overflow = (value > (i16::max_value() as i32)) | (value < (i16::min_value() as i32));
+
+    (value as u16, self.flags(value == 0, value < 0, carry, overflow))
   }
 
-  fn calculate_rotate(&self, state: &bus::State, direction: control::AluRotateDirection, include_carry: bool) -> Result<([u8; 2], Flags), Error> {
-    let v = self.input_i(state)? as u8;
-    let (result, wrap, mask) = match direction {
-      control::AluRotateDirection::Right => (v >> 1, v & 0x01 << 7, 0x80),
-      control::AluRotateDirection::Left => (v << 1, v & 0x80 >> 7, 0x01),
-    };
-    let (result, carry) = if include_carry {
-      (result | if self.control.Flags[&Flag::C] { mask } else { 0x00 }, wrap != 0)
-    } else {
-      (result | wrap, self.control.Flags[&Flag::C])
-    };
-    Ok(([0x00, result], hash_map!{
-      Flag::Z => result == 0,
-      Flag::C => carry,
-      Flag::V => false,
-      Flag::S => sign(result),
-    }))
-  }
-
-  fn calculate(&self, state: &bus::State) -> Result<([u8; 2], Flags), Error> {
-    use crate::control::AluOperation as Operation;
-    #[allow(non_snake_case)]
-    match self.control.Operation {
-      Operation::Add { SignExtend, Carry } => self.calculate_add(state, SignExtend, Carry),
-      Operation::And => self.calculate_bitwise(state, |a, b| a & b),
-      Operation::Or  => self.calculate_bitwise(state, |a, b| a | b),
-      Operation::Xor => self.calculate_bitwise(state, |a, b| a ^ b),
-      Operation::Rotate { Direction, Carry } => self.calculate_rotate(state, Direction, Carry),
+  fn calculate(&self) -> (u16, [bool; 8]) {
+    match self.control.alu.mode {
+      AluMode::Shift => self.shift(),
+      AluMode::Add   => self.binary(|t0, t1,  c| t0 + t1 + c),
+      AluMode::And   => self.binary(|t0, t1, _c| t0 & t1),
+      AluMode::Or    => self.binary(|t0, t1, _c| t0 | t1),
+      AluMode::Xor   => self.binary(|t0, t1, _c| t0 ^ t1),
     }
+  }
+
+  pub fn get_flags(&self) -> [bool; 8] {
+    self.calculate().1
   }
 }
 
-impl bus::Device<control::Alu> for Alu {
-  fn update(&mut self, control: control::Alu) -> Result<(), Error> {
+impl BusComponent for Alu {
+  fn set_control(&mut self, control: Control) {
     self.control = control;
-    self.flags = self.control.Flags.clone();
-    Ok(())
   }
 
-  fn read(&self) -> Result<bus::State, Error> {
-    Ok(bus::State {
-      data: if let control::Write::Write = self.control.Data {
-        Some(self.o_value[1])
-      } else {
-        None
-      },
-      addr: if let control::Write::Write = self.control.Addr {
-        Some(from_bytes(&self.o_value))
-      } else {
-        None
-      },
-    })
-  }
-
-  fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
-    if let control::Read::Read = self.control.Temp {
-      self.t_value = state.read_data()?;
+  fn load(&mut self, value: u16) {
+    for i in 0..2 {
+      if self.control.alu.t[i].load {
+        self.t[i] = value;
+      }
     }
-
-    let (value, flags) = self.calculate(state)?;
-    self.flags = flags;
-    if let control::Write::Write = self.control.Output {
-      self.o_value = value;
-    }
-
-    Ok(())
   }
-}
 
-impl fmt::Display for Alu {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "0x{:04X}, 0x{:02X} (Temp={}, TempSelect={}, Input={}, Operation={}, Output={}, Address={}, Data={}) [ALU]",
-      from_bytes(&self.o_value), self.t_value, self.control.Temp, self.control.TempSelect, self.control.Input,
-      self.control.Operation, self.control.Output, self.control.Addr, self.control.Data)
+  fn data(&self) -> Option<u16> {
+    if self.control.alu.out {
+      Some(self.calculate().0)
+    } else {
+      None
+    }
   }
 }

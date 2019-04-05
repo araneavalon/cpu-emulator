@@ -1,77 +1,95 @@
 
 use std::fmt;
-use std::fs::File;
-use std::io::prelude::*;
+use std::ops::{Index, IndexMut};
 
-use crate::error::Error;
-
-
-const RAM_SIZE: usize = 0x20000; // 128K
-const ROM_SIZE: usize = 0x04000; // 16K
+use crate::control::Control;
+use crate::components::BusComponent;
 
 
+const RAM_WORDS: usize = 2048;
+
+struct Ram {
+  data: [u16; RAM_WORDS],
+}
+
+impl Ram {
+  pub fn new() -> Ram {
+    Ram { data: [0x0000; RAM_WORDS] }
+  }
+}
+
+impl fmt::Debug for Ram {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fmt::Debug::fmt(&self.data[..], f)
+  }
+}
+
+impl Index<u16> for Ram {
+  type Output = u16;
+
+  fn index(&self, address: u16) -> &u16 {
+    &self.data[address as usize]
+  }
+}
+
+impl IndexMut<u16> for Ram {
+  fn index_mut(&mut self, address: u16) -> &mut u16 {
+    &mut self.data[address as usize]
+  }
+}
+
+
+#[derive(Debug)]
 pub struct Memory {
-  ram: [u8; RAM_SIZE],
-  rom: [u8; ROM_SIZE],
+  control: Control,
+  address: u16,
+  ram: Ram,
 }
 
 impl Memory {
   pub fn new() -> Memory {
     Memory {
-      ram: [0x00; RAM_SIZE],
-      rom: {
-        let mut rom = [0x00; ROM_SIZE];
-
-        let mut file = String::new();
-        File::open(format!("{}/assets/rom.asm", env!("CARGO_MANIFEST_DIR"))).unwrap()
-          .read_to_string(&mut file).unwrap();
-
-        let binary = crate::assembler::assemble(&file).unwrap();
-        for (address, byte) in binary.iter().enumerate() {
-          rom[address] = *byte;
-        }
-
-        rom
-      },
+      control: Control::new(),
+      address: 0x0000,
+      ram: Ram::new(),
     }
   }
 
-  pub fn get_rom(&self, address: usize) -> Result<u8, Error> {
-    Ok(self.rom[address])
-  }
-
-  pub fn get_ram(&self, address: usize) -> Result<u8, Error> {
-    Ok(self.ram[address])
-  }
-
-  pub fn set_ram(&mut self, address: usize, value: u8) -> Result<(), Error> {
-    self.ram[address] = value;
-    Ok(())
+  pub fn set_address(&mut self, address: u16) {
+    self.address = address;
   }
 }
 
-impl PartialEq for Memory {
-  fn eq(&self, other: &Memory) -> bool {
-    self.ram[..] == other.ram[..] &&
-      self.rom[..] == other.rom[..]
+impl BusComponent for Memory {
+  fn set_control(&mut self, control: Control) {
+    self.control = control;
   }
 
-  fn ne(&self, other: &Memory) -> bool {
-    self.ram[..] != other.ram[..] ||
-      self.rom[..] != other.rom[..]
+  fn load(&mut self, value: u16) {
+    if self.control.memory.load {
+      let index = self.address >> 1;
+      if self.control.memory.word {
+        self.ram[index] = value;
+      } else if (self.address & 1) != 0 {
+        self.ram[index] = (self.ram[index] & 0x00FF) | (value << 8);
+      } else {
+        self.ram[index] = (self.ram[index] & 0xFF00) | (value & 0x00FF);
+      }
+    }
   }
-}
 
-impl Eq for Memory {}
-
-impl fmt::Display for Memory {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Memory {{No Display Implementation}}")
-  }
-}
-
-impl fmt::Debug for Memory {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Memory {{No Debug Implementation}}")
+  fn data(&self) -> Option<u16> {
+    if !self.control.memory.out {
+      let index = self.address >> 1;
+      if self.control.memory.word {
+        Some(self.ram[index])
+      } else if (self.address & 1) != 0 {
+        Some(self.ram[index] >> 8)
+      } else {
+        Some(self.ram[index] & 0x00FF)
+      }
+    } else {
+      None
+    }
   }
 }

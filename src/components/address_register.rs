@@ -1,58 +1,42 @@
 
-use std::fmt;
+use crate::control::{
+  Control,
+  Address,
+};
+use crate::components::BusComponent;
 
-use crate::math::*;
-use crate::bus;
-use crate::control;
-use crate::error::Error;
 
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct AddressRegister {
-  control: control::AddressRegister,
-  value: [u8; 2],
+  control: Control,
+  value: u16,
 }
 
 impl AddressRegister {
   pub fn new() -> AddressRegister {
     AddressRegister {
-      control: control::AddressRegister::new(),
-      value: [0x00, 0x00],
+      control: Control::new(),
+      value: 0x0000,
     }
   }
 }
 
-impl bus::Device<control::AddressRegister> for AddressRegister {
-  fn update(&mut self, control: control::AddressRegister) -> Result<(), Error> {
+impl BusComponent for AddressRegister {
+  fn set_control(&mut self, control: Control) {
     self.control = control;
-    Ok(())
   }
 
-  fn read(&self) -> Result<bus::State, Error> {
-    Ok(bus::State {
-      data: None,
-      addr: if let control::Write::Write = self.control.Addr {
-        Some(from_bytes(&self.value))
-      } else {
-        None
-      },
-    })
-  }
-
-  fn clk(&mut self, state: &bus::State) -> Result<(), Error> {
-    if let control::Read::Read = self.control.DataH {
-      self.value[0] = state.read_data()?;
+  fn load(&mut self, value: u16) {
+    if self.control.a.load {
+      self.value = value;
     }
-    if let control::Read::Read = self.control.DataL {
-      self.value[1] = state.read_data()?;
-    }
-    Ok(())
   }
-}
 
-impl fmt::Display for AddressRegister {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "0x{:04X} (Address={}, DataH={}, DataL={}) [AddressRegister]",
-      from_bytes(&self.value), self.control.Addr, self.control.DataH, self.control.DataL)
+  fn address(&self) -> Option<u16> {
+    if let Address::A = self.control.address {
+      Some(self.value)
+    } else {
+      None
+    }
   }
 }
