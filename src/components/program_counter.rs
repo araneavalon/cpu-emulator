@@ -1,9 +1,11 @@
 
+use std::fmt;
 use crate::control::{
   Control,
   Address,
 };
-use crate::components::BusComponent;
+use crate::error::Result;
+use super::BusComponent;
 
 
 #[derive(Debug)]
@@ -25,38 +27,62 @@ impl ProgramCounter {
   }
 }
 
+impl fmt::Display for ProgramCounter {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self.control.address {
+      Address::ProgramCounter => write!(f, "[PC]")?,
+      _ => write!(f, " PC ")?,
+    }
+    if self.control.pc.load && self.control.pc.out {
+      write!(f, " <>")?;
+    } else if self.control.pc.load {
+      write!(f, " <=")?;
+    } else if self.control.pc.out {
+      write!(f, " =>")?;
+    } else {
+      write!(f, " ==")?;
+    }
+    write!(f, " 0x{:04X}", self.value)?;
+    if self.control.pc.increment {
+      write!(f, " ++")?;
+    }
+    Ok(())
+  }
+}
+
 impl BusComponent for ProgramCounter {
+  fn name(&self) -> &'static str {
+    "ProgramCounter"
+  }
+
   fn set_control(&mut self, control: Control) {
     self.control = control;
 
     if self.control.pc.increment {
-      if self.value != 0xFFFF {
-        self.value += 1;
-      } else {
-        self.value = 0x0000;
-      }
+      self.value = self.value.wrapping_add(1);
     }
   }
 
-  fn load(&mut self, value: u16) {
+  fn load(&mut self, value: u16) -> Result<()> {
     if self.control.pc.load {
       self.value = value;
     }
+    Ok(())
   }
 
-  fn data(&self) -> Option<u16> {
+  fn data(&self) -> Result<Option<u16>> {
     if self.control.pc.out {
-      Some(self.value)
+      Ok(Some(self.value))
     } else {
-      None
+      Ok(None)
     }
   }
 
-  fn address(&self) -> Option<u16> {
+  fn address(&self) -> Result<Option<u16>> {
     if let Address::ProgramCounter = self.control.address {
-      Some(self.value)
+      Ok(Some(self.value))
     } else {
-      None
+      Ok(None)
     }
   }
 }

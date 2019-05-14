@@ -1,2 +1,5 @@
 /target
 **/*.rs.bk
+/assembler/target
+*.rom
+*.a

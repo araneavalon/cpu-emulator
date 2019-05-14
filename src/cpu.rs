@@ -1,24 +1,27 @@
 
-use crate::components::BusComponent;
-use crate::components::{
-  address_register::AddressRegister,
-  alu::Alu,
-  flags::Flags,
-  instruction_register::InstructionRegister,
-  link_register::LinkRegister,
-  memory::Memory,
-  program_counter::ProgramCounter,
-  register_file::RegisterFile,
-  stack_pointers::StackPointers,
+use std::fmt;
+use crate::error::{Error, Result};
+use super::components::{
+  BusComponent,
+  AddressRegister,
+  Alu,
+  Flags,
+  InstructionRegister,
+  LinkRegister,
+  ProgramCounter,
+  RegisterFile,
+  StackPointers,
 };
-use crate::control::{
+use super::memory::Memory;
+use super::io::Screen;
+use super::control::{
   ControlLogic,
   Control,
 };
 
 
 #[derive(Debug)]
-struct Cpu {
+pub struct Cpu {
   control: ControlLogic,
 
   a: AddressRegister,
@@ -30,23 +33,27 @@ struct Cpu {
   pc: ProgramCounter,
   r: RegisterFile,
   s: StackPointers,
+
+  c: Control,
 }
 
 impl Cpu {
-  pub fn new() -> Cpu {
-    Cpu {
-      control: ControlLogic::new(),
+  pub fn new(rom: Vec<u16>) -> Result<Cpu> {
+    Ok(Cpu {
+      control: ControlLogic::new()?,
 
       a: AddressRegister::new(),
       alu: Alu::new(),
       flags: Flags::new(),
       i: InstructionRegister::new(),
       lr: LinkRegister::new(),
-      memory: Memory::new(),
+      memory: Memory::new(rom),
       pc: ProgramCounter::new(),
       r: RegisterFile::new(),
       s: StackPointers::new(),
-    }
+
+      c: Control::new(),
+    })
   }
 
   fn components(&self) -> Vec<&dyn BusComponent> {
@@ -67,51 +74,73 @@ impl Cpu {
     for i in self.components_mut() {
       i.set_control(c);
     }
+    self.c = c;
   }
 
-  fn load(&mut self, value: u16) {
-    for i in self.components_mut() {
-      i.load(value);
+  fn load(&mut self, value: Option<u16>) -> Result<()> {
+    if let Some(value) = value {
+      for i in self.components_mut() {
+        i.load(value)?;
+      }
+    }
+    Ok(())
+  }
+
+  fn data(&self) -> Result<Option<u16>> {
+    let mut out = None;
+    for component in self.components() {
+      match (out, component.data()?) {
+        (Some(_), Some(_)) => return Err(Error::DataBusConflict(self.i.get(), component.name())),
+        (None, data) => out = data,
+        (_, None) => (),
+      }
+    }
+    match (out, self.i.get()) {
+      (Some(value), _) => Ok(Some(value)),
+      (None, 0x0000) => Ok(None), // NOP
+      (None, 0x0080) => Ok(None), // HLT
+      (None, _) if self.c.alu.set_flags => Ok(None), // CMP,CPN,TEST
+      (None, op) => Err(Error::DataBusUnused(op)),
     }
   }
 
-  fn data(&self) -> u16 {
+  fn address(&self) -> Result<u16> {
     let mut out = None;
-    for i in self.components() {
-      match out {
-        None => out = i.data(),
-        Some(_) => panic!("Attempted to write two things to the data bus at once."),
+    for component in self.components() {
+      match (out, component.address()?) {
+        (Some(_), Some(_)) => return Err(Error::AddressBusConflict(self.i.get(), component.name())),
+        (None, address) => out = address,
+        (_, None) => (),
       }
     }
     match out {
-      None => panic!("Nothing wrote to the data bus this cycle, check microcode?"),
-      Some(value) => value,
+      None => Err(Error::AddressBusUnused(self.i.get())),
+      Some(value) => Ok(value),
     }
   }
 
-  fn address(&self) -> u16 {
-    let mut out = None;
-    for i in self.components() {
-      match out {
-        None => out = i.address(),
-        Some(_) => panic!("Attempted to write two things to the address bus at once."),
-      }
-    }
-    match out {
-      None => panic!("Nothing wrote to the address bus this cycle, shouldn't the default be A?"),
-      Some(value) => value,
-    }
-  }
-
-  pub fn pre_cycle(&mut self) {
-    let c = self.control.decode(self.i.get(), &self.flags);
+  pub fn half_cycle(&mut self) -> Result<bool> {
+    let c = self.control.decode(self.i.get(), &self.flags)?;
     self.set_control(c);
-    self.memory.set_address(self.address());
+    self.memory.set_address(self.address()?);
     self.lr.link(self.pc.link());
+    Ok(c.halt)
   }
 
-  pub fn cycle(&mut self) {
-    self.load(self.data());
+  pub fn cycle(&mut self) -> Result<()> {
+    self.load(self.data()?)?;
     self.flags.set(self.alu.get_flags());
+    Ok(())
+  }
+
+  pub fn screen(&self) -> Result<&Screen> {
+    self.memory.screen()
+  }
+}
+
+impl fmt::Display for Cpu {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{c}\n{r}\n\n{pc}\n{lr}\n{s}\n{a}\n{mem}\n\n{i}\n{f}\n\n{alu}\n\n",
+      c=self.control, r=self.r, pc=self.pc, lr=self.lr, s=self.s, a=self.a, mem=self.memory, i=self.i, f=self.flags, alu=self.alu)
   }
 }

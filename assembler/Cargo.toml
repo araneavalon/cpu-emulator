@@ -1,9 +1,8 @@
 [package]
-name = "cpu"
+name = "assembler"
 version = "0.1.0"
 authors = ["araneavalon <35237939+araneavalon@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-assembler = { path = "assembler" }
-sdl2 = "0.32.1"
+nom = "4.1.1"

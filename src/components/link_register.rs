@@ -1,9 +1,8 @@
 
-use crate::control::{
-  Control,
-  Address,
-};
-use crate::components::BusComponent;
+use std::fmt;
+use crate::control::Control;
+use crate::error::Result;
+use super::BusComponent;
 
 
 #[derive(Debug)]
@@ -27,30 +26,51 @@ impl LinkRegister {
   }
 }
 
+impl fmt::Display for LinkRegister {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, " LR ")?;
+    if self.control.lr.load && self.control.lr.out {
+      write!(f, " <>")?;
+    } else if self.control.lr.load {
+      write!(f, " <=")?;
+    } else if self.control.lr.out {
+      write!(f, " =>")?;
+    } else {
+      write!(f, " ==")?;
+    }
+    write!(f, " 0x{:04X}", self.value)?;
+    if self.control.lr.increment {
+      write!(f, " ++")?;
+    }
+    Ok(())
+  }
+}
+
 impl BusComponent for LinkRegister {
+  fn name(&self) -> &'static str {
+    "LinkRegister"
+  }
+
   fn set_control(&mut self, control: Control) {
     self.control = control;
 
     if self.control.lr.increment {
-      if self.value != 0xFFFF {
-        self.value += 1;
-      } else {
-        self.value = 0x0000;
-      }
+      self.value = self.value.wrapping_add(1);
     }
   }
 
-  fn load(&mut self, value: u16) {
+  fn load(&mut self, value: u16) -> Result<()> {
     if self.control.lr.load {
       self.value = value;
     }
+    Ok(())
   }
 
-  fn data(&self) -> Option<u16> {
+  fn data(&self) -> Result<Option<u16>> {
     if self.control.lr.out {
-      Some(self.value)
+      Ok(Some(self.value))
     } else {
-      None
+      Ok(None)
     }
   }
 }

@@ -1,9 +1,11 @@
 
+use std::fmt;
 use crate::control::{
   Control,
   Address,
 };
-use crate::components::BusComponent;
+use crate::error::Result;
+use super::BusComponent;
 
 
 #[derive(Debug)]
@@ -21,22 +23,43 @@ impl AddressRegister {
   }
 }
 
+impl fmt::Display for AddressRegister {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self.control.address {
+      Address::A => write!(f, "[ A]")?,
+      _ =>          write!(f, "  A ")?,
+    }
+    if self.control.a.load {
+      write!(f, " <=")?;
+    } else {
+      write!(f, " ==")?;
+    }
+    write!(f, " 0x{:04X}", self.value)?;
+    Ok(())
+  }
+}
+
 impl BusComponent for AddressRegister {
+  fn name(&self) -> &'static str {
+    "AddressRegister"
+  }
+
   fn set_control(&mut self, control: Control) {
     self.control = control;
   }
 
-  fn load(&mut self, value: u16) {
+  fn load(&mut self, value: u16) -> Result<()> {
     if self.control.a.load {
       self.value = value;
     }
+    Ok(())
   }
 
-  fn address(&self) -> Option<u16> {
+  fn address(&self) -> Result<Option<u16>> {
     if let Address::A = self.control.address {
-      Some(self.value)
+      Ok(Some(self.value))
     } else {
-      None
+      Ok(None)
     }
   }
 }

@@ -1,9 +1,11 @@
 
+use std::fmt;
 use crate::control::{
   Control,
   Condition,
 };
-use crate::components::BusComponent;
+use crate::error::Result;
+use super::BusComponent;
 
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -44,9 +46,9 @@ impl Flags {
       Condition::Zero => self.flags[Flag::Zero as usize],
       Condition::Sign => self.flags[Flag::Sign as usize],
       Condition::Carry => self.flags[Flag::Carry as usize],
-      Condition::CarryNotZero => self.flags[Flag::Carry as usize] & !self.flags[Flag::Zero as usize],
+      Condition::CarryNotZero => self.flags[Flag::Carry as usize] && !self.flags[Flag::Zero as usize],
       Condition::Overflow => self.flags[Flag::Overflow as usize],
-      Condition::OverflowNotZero => self.flags[Flag::Overflow as usize] & !self.flags[Flag::Zero as usize],
+      Condition::OverflowNotZero => self.flags[Flag::Overflow as usize] && !self.flags[Flag::Zero as usize],
     }
   }
 
@@ -57,30 +59,60 @@ impl Flags {
       }
     }
   }
+
+  fn value(&self) -> u16 {
+    let mut value = 0;
+    for i in 0..16 {
+      value |= (self.flags[i] as u16) << i;
+    }
+    value
+  }
+}
+
+impl fmt::Display for Flags {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    if self.control.alu.set_flags {
+      write!(f, " >F ")?;
+    } else {
+      write!(f, "  F ")?;
+    }
+    if self.control.flags.load && self.control.flags.out {
+      write!(f, " <>")?;
+    } else if self.control.flags.load {
+      write!(f, " <=")?;
+    } else if self.control.flags.out {
+      write!(f, " =>")?;
+    } else {
+      write!(f, " ==")?;
+    }
+    write!(f, " 0b{:016b}", self.value())?;
+    Ok(())
+  }
 }
 
 impl BusComponent for Flags {
+  fn name(&self) -> &'static str {
+    "FlagsRegister"
+  }
+
   fn set_control(&mut self, control: Control) {
     self.control = control;
   }
 
-  fn load(&mut self, value: u16) {
+  fn load(&mut self, value: u16) -> Result<()> {
     if self.control.flags.load {
       for i in 0..16 {
         self.flags[i] = ((value >> i) & 1) != 0;
       }
     }
+    Ok(())
   }
 
-  fn data(&self) -> Option<u16> {
+  fn data(&self) -> Result<Option<u16>> {
     if self.control.flags.out {
-      let mut out = 0;
-      for i in 0..16 {
-        out = out | ((self.flags[i] as u16) << i);
-      }
-      Some(out)
+      Ok(Some(self.value()))
     } else {
-      None
+      Ok(None)
     }
   }
 }

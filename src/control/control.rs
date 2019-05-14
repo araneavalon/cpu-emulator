@@ -42,7 +42,7 @@ pub struct StackRegister {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct BiRegister {
+pub struct Bidirectional {
   pub load: bool,
   pub out: bool,
 }
@@ -57,9 +57,9 @@ pub enum IMode {
   None,
   SignedByte,
   UnsignedByte,
-  WordOffset,
   Bitmask,
   Interrupt,
+  Startup,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -89,15 +89,7 @@ pub struct Alu {
   pub carry_invert: bool,
   // SHIFT
   pub direction: bool,
-  pub word: bool,
   pub extend: bool,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Memory {
-  pub load: bool,
-  pub out: bool,
-  pub word: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -122,13 +114,13 @@ pub struct Control {
   pub address: Address,
   pub register: RegisterFile,
   pub alu: Alu,
-  pub flags: BiRegister,
+  pub flags: Bidirectional,
   pub pc: ProgramRegister,
   pub lr: ProgramRegister,
   pub s: [StackRegister; 2],
   pub a: LoadRegister,
   pub i: InstructionRegister,
-  pub memory: Memory,
+  pub memory: Bidirectional,
   pub branch: Branch,
   pub link: bool,
   pub stack_sequence: bool,
@@ -153,10 +145,9 @@ impl Control {
         t1_invert: false,
         carry_invert: false,
         direction: false,
-        word: false,
         extend: false,
       },
-      flags: BiRegister { load: false, out: false },
+      flags: Bidirectional { load: false, out: false },
       pc: ProgramRegister { load: false, out: false, increment: false },
       lr: ProgramRegister { load: false, out: false, increment: false },
       s: [
@@ -165,7 +156,7 @@ impl Control {
       ],
       a: LoadRegister { load: false },
       i: InstructionRegister { load: false, mode: IMode::None },
-      memory: Memory { load: false, out: false, word: true },
+      memory: Bidirectional { load: false, out: false },
       branch: Branch { negate: false, condition: Condition::Always },
       link: false,
       stack_sequence: false,
