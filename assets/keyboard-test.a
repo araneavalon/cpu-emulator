@@ -1,0 +1,21 @@
+
+@./init.a
+1:LD   A,'.'
+  LD   (X),A
+  ADD  X,1
+  JMP  (1-)
+
+KB_INT:
+  SET  F,15,0     // Disable Interrupts
+1:LD   A,(0xDE04)
+  TEST A,11
+Z.JMP  (2+)
+  LD   (X),A
+  ADD  X,1
+  JMP  (1-)
+2:SET  F,15,1
+  RET0
+
+#define * = 0xFFFE
+#word KB_INT
+#word INIT

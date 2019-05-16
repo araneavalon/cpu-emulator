@@ -1,13 +1,17 @@
 
-use std::ops::{Index, IndexMut};
 use std::fmt;
 
 mod keyboard;
 mod screen;
 
-use crate::error::Result;
+use crate::memory::Addressable;
+use crate::error::{
+  Result,
+  Error,
+};
 
 pub use screen::Screen;
+pub use keyboard::Keyboard;
 
 
 // 0xC000 0xCBFF   Text (3 screens) (only uses low byte)
@@ -22,7 +26,7 @@ pub use screen::Screen;
 
 pub struct Io {
   screen: Screen,
-  // keyboard: Keyboard,
+  keyboard: Keyboard,
   io: [u16; 0x0200],
 }
 
@@ -30,48 +34,63 @@ impl Io {
   pub fn new() -> Io {
     Io {
       screen: Screen::new(),
+      keyboard: Keyboard::new(),
       io: [0x0000; 0x0200],
     }
-  }
-
-  pub fn name(&self) -> &'static str {
-    " IO"
-  }
-
-  pub fn valid(&self, address: u16) -> bool {
-    (0xC000 <= address) && (address < 0xE000)
   }
 
   pub fn screen(&self) -> Result<&Screen> {
     Ok(&self.screen)
   }
-}
 
-impl Index<u16> for Io {
-  type Output = u16;
-
-  fn index(&self, address: u16) -> &u16 {
-    if self.screen.valid(address) {
-      &self.screen[address]
-    } else {
-      panic!("Invalid address used to index Io. Check Io::valid.");
-    }
+  pub fn keyboard(&mut self) -> Result<&mut Keyboard> {
+    Ok(&mut self.keyboard)
   }
 }
 
-impl IndexMut<u16> for Io {
-  fn index_mut(&mut self, address: u16) -> &mut u16 {
+impl Addressable for Io {
+  fn name(&self) -> &'static str {
+    " IO"
+  }
+
+  fn valid(&self, address: u16) -> bool {
+    (0xC000 <= address) && (address < 0xE000)
+  }
+
+  fn read(&self, address: u16) -> Result<u16> {
     if self.screen.valid(address) {
-      &mut self.screen[address]
+      self.screen.read(address)
+    } else if self.keyboard.valid(address) {
+      self.keyboard.read(address)
     } else {
-      panic!("Invalid address used to index Io. Check Io::valid.");
+      Err(Error::InvalidRead(address, "Could not read from IO RAM."))
+    }
+  }
+
+  fn peek(&self, address: u16) -> Result<u16> {
+    if self.screen.valid(address) {
+      self.screen.peek(address)
+    } else if self.keyboard.valid(address) {
+      self.keyboard.peek(address)
+    } else {
+      Err(Error::InvalidRead(address, "Could not peek from IO RAM."))
+    }
+  }
+
+  fn write(&mut self, address: u16, value: u16) -> Result<()> {
+    if self.screen.valid(address) {
+      self.screen.write(address, value)
+    } else if self.keyboard.valid(address) {
+      self.keyboard.write(address, value)
+    } else {
+      Err(Error::InvalidWrite(address, "Could not write to IO RAM."))
     }
   }
 }
 
 impl fmt::Debug for Io {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Io {{ screen: {:?}, io: {:?} }}",
-      self.screen, &self.io[..])
+    write!(f, "Io {{ screen: {:?}, keyboard: {:?}, io: {{:?}} }}",
+      self.screen, self.keyboard, /*&self.io[..]*/)
   }
 }

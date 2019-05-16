@@ -19,6 +19,7 @@ pub enum Error {
   InvalidCondition(u16, u16),
   InvalidRead(u16, &'static str),
   InvalidWrite(u16, &'static str),
+  InvalidInterrupt(u16),
   Impossible(u16, &'static str),
   File(String, io::Error),
   InvalidROM,
@@ -51,6 +52,8 @@ impl fmt::Display for Error {
         write!(f, "InvalidRead(0x{:04X}): {}", op, message),
       Error::InvalidWrite(op, message) =>
         write!(f, "InvalidWrite(0x{:04X}): {}", op, message),
+      Error::InvalidInterrupt(interrupt) =>
+        write!(f, "InvalidInterrupt({}): Hardware Interrupts must be in the range [0,7].", interrupt),
       Error::Impossible(op, message) =>
         write!(f, "Impossible(0x{:04X}): {}", op, message),
       Error::File(path, error) =>

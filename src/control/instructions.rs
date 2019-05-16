@@ -11,11 +11,15 @@ pub struct Iter {
   name: &'static str,
   op: u16,
   last_index: Option<usize>,
-  iter: std::vec::IntoIter<(usize, Control)>,
+  iter: std::iter::Peekable<std::vec::IntoIter<(usize, Control)>>,
 }
 impl Iter {
-  fn new(name: &'static str, op: u16, iter: std::vec::IntoIter<(usize, Control)>) -> Iter {
-    Iter { name, op, last_index: None, iter }
+  fn new(name: &'static str, op: u16, vec: Vec<(usize, Control)>) -> Iter {
+    Iter { name, op, last_index: None, iter: vec.into_iter().peekable() }
+  }
+
+  pub fn peek(&mut self) -> Option<&(usize, Control)> {
+    self.iter.peek()
   }
 }
 impl Iterator for Iter {
@@ -52,12 +56,12 @@ pub enum Branch {
   Interrupt,
 }
 impl Branch {
-  fn mask(&self) -> Option<u16> {
+  fn mask(&self) -> Option<(bool, u16)> {
     match self {
       Branch::None => None,
-      Branch::Near => Some(0x0400),
-      Branch::Far => Some(0x1000),
-      Branch::Interrupt => panic!("Interrupt branch not yet implemented."),
+      Branch::Near => Some((false, 0x0400)),
+      Branch::Far => Some((false, 0x1000)),
+      Branch::Interrupt => Some((true, 0x0000)),
     }
   }
 }
@@ -128,7 +132,7 @@ impl Stack {
       }
     }
 
-    Ok(Iter::new(self.name, op, out.into_iter()))
+    Ok(Iter::new(self.name, op, out))
   }
 }
 
@@ -146,11 +150,10 @@ impl Normal {
 
   pub fn decode(&self, microcode: &MicrocodeArray, op: u16) -> Result<Iter> {
     let branch = self.branch.mask();
-    let iter = self.microcode.iter()
+    let vec = self.microcode.iter()
       .map(|index| Ok((*index, microcode[*index].decode(op, branch)?)))
-      .collect::<Result<Vec<(usize, Control)>>>()?
-      .into_iter();
-    Ok(Iter::new(self.name, op, iter))
+      .collect::<Result<Vec<(usize, Control)>>>()?;
+    Ok(Iter::new(self.name, op, vec))
   }
 }
 
@@ -173,11 +176,10 @@ impl Argument {
   pub fn decode(&self, microcode: &MicrocodeArray, op: u16) -> Result<Iter> {
     let mode = ARGUMENT_DECODE_TABLE[((op as usize) & 0x03C0) >> 6];
     let branch = self.branch.mask();
-    let iter = self.microcode[mode].1.iter()
+    let vec = self.microcode[mode].1.iter()
       .map(|index| Ok((*index, microcode[*index].decode(op, branch)?)))
-      .collect::<Result<Vec<(usize, Control)>>>()?
-      .into_iter();
-    Ok(Iter::new(self.microcode[mode].0, op, iter))
+      .collect::<Result<Vec<(usize, Control)>>>()?;
+    Ok(Iter::new(self.microcode[mode].0, op, vec))
   }
 }
 
@@ -228,13 +230,13 @@ impl Instructions {
   pub fn new(microcode: &MicrocodeArray) -> Result<Instructions> {
     Ok(Instructions {
       fetch: microcode[0].decode(0x0000, None)?, // Opcode doesn't matter for fetch.
-      init: Instructions::iter(microcode)?,
+      init: Instructions::init_iter(microcode)?,
       instructions: Instructions::array(),
     })
   }
 
-  fn iter(microcode: &MicrocodeArray) -> Result<Iter> {
-    Instruction::normal("INIT", Branch::None, vec![44, 45]).decode(microcode, 0x0000)
+  fn init_iter(microcode: &MicrocodeArray) -> Result<Iter> {
+    Instruction::normal("INIT", Branch::None, vec![45, 43]).decode(microcode, 0x0000)
   }
 
   fn array() -> [Instruction; 23] {
@@ -286,8 +288,8 @@ impl Instructions {
       Instruction::normal("LD x,(word)", Branch::None, vec![5, 38]), // 19 LD x,(word)
       Instruction::normal("LD x,(r+r)",  Branch::None, vec![40, 7, 8, 38]), // 20 LD x,(r+r)
 
-      Instruction::normal("INT i", Branch::Interrupt, vec![41, 42]), // 21 INT
-      Instruction::normal("NOP", Branch::None, vec![43]), // 22 NOP
+      Instruction::normal("INT i", Branch::Interrupt, vec![41, 42, 43]), // 21 INT
+      Instruction::normal("NOP", Branch::None, vec![44]), // 22 NOP
     ]
   }
 
@@ -297,6 +299,11 @@ impl Instructions {
 
   pub fn init(&self) -> Iter {
     self.init.clone()
+  }
+
+  pub fn interrupt(&self, microcode: &MicrocodeArray, interrupt: u16) -> Result<(u16, Iter)> {
+    let op = 0x0400 | (interrupt << 3);
+    Ok((op, self.instructions[21].decode(&microcode, op)?))
   }
 
   pub fn decode(&self, microcode: &MicrocodeArray, op: u16) -> Result<Iter> {

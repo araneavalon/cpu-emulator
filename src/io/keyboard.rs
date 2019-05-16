@@ -1,13 +1,21 @@
 
+use std::cell::RefCell;
 use sdl2::keyboard::{
   Keycode,
   Mod,
 };
 
+use crate::memory::Addressable;
+use crate::error::{
+  Result,
+  Error,
+};
 
-// 0x0000 Keyboard Control/Data
-// ........ .......M
+
+// 0xDE04 Keyboard Control/Data
+// ........ ......CM
 //   M    Interrupt for Mod keys.
+//   C    Capslock enabled.
 // SCAGW.EK KKKKKKKK
 //   SCAG Shift, Control, Alt, Gui (Windows Key)
 //   W    KeyCode is valid.
@@ -17,31 +25,16 @@ use sdl2::keyboard::{
 
 #[derive(Debug)]
 pub struct Keyboard {
-  mod_interrupt: bool,
-  capslock: bool,
-  valid: bool,
-  key: u16,
+  mode: u16,
+  keys: RefCell<Vec<u16>>,
 }
 
 impl Keyboard {
   pub fn new() -> Keyboard {
     Keyboard {
-      mod_interrupt: false,
-      capslock: false,
-      valid: false,
-      key: 0x0000,
+      mode: 0x0000,
+      keys: RefCell::new(Vec::new()),
     }
-  }
-
-  pub fn set_control(&mut self, value: u16) {
-    self.mod_interrupt = (value & 0x0001) != 0;
-    self.valid = false;
-  }
-
-  pub fn get_data(&mut self) -> u16 {
-    let key = if self.valid { self.key | 0x0800 } else { self.key & 0xF7FF };
-    self.valid = false;
-    key
   }
 
   fn get_mod(keymod: Mod) -> u16 {
@@ -52,8 +45,9 @@ impl Keyboard {
   }
 
   fn get_char(&self, key: Keycode, keymod: Mod) -> Option<u16> {
-    let m = self.mod_interrupt;
-    let s = self.capslock || keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
+    let m = (self.mode & 0x0001) != 0;
+    let c = (self.mode & 0x0002) != 0;
+    let s = keymod.intersects(Mod::LSHIFTMOD | Mod::RSHIFTMOD);
     match key {
       Keycode::Backspace      => Some(0x0008),
       Keycode::Tab            => Some(0x0009),
@@ -82,8 +76,10 @@ impl Keyboard {
 
       Keycode::Backslash if s => Some('|' as u16),
 
-      key if ((key as u16) < 0x80) && s => Some(key.name().as_bytes()[0].to_ascii_uppercase() as u16),
-      key if (key as u16) < 0x80 => Some(key.name().as_bytes()[0].to_ascii_lowercase() as u16),
+      key if ((key as u16) < 0x80) && (key.name().len() == 1) && (s ^ c) =>
+        Some(key.name().as_bytes()[0].to_ascii_uppercase() as u16),
+      key if ((key as u16) < 0x80) && (key.name().len() == 1) && !(s ^ c) =>
+        Some(key.name().as_bytes()[0].to_ascii_lowercase() as u16),
 
       Keycode::CapsLock  if m => Some(0x0239),
 
@@ -125,16 +121,47 @@ impl Keyboard {
 
   pub fn pressed(&mut self, key: Keycode, keymod: Mod) -> bool {
     if key == Keycode::CapsLock {
-      self.capslock = !self.capslock;
+      self.mode = self.mode ^ 0x0002;
     }
 
     if let Some(chr) = self.get_char(key, keymod) {
-      self.key = chr | Keyboard::get_mod(keymod);
-      self.valid = true;
-      true
-    } else {
-      self.valid = false;
-      false
+      self.keys.borrow_mut().push(chr | Keyboard::get_mod(keymod) | 0x0800);
     }
+
+    self.keys.borrow().len() > 0
+  }
+}
+
+impl Addressable for Keyboard {
+  fn name(&self) -> &'static str {
+    "Keyboard"
+  }
+
+  fn valid(&self, address: u16) -> bool {
+    address == 0xDE04
+  }
+
+  fn read(&self, address: u16) -> Result<u16> {
+    match address {
+      0xDE04 if self.keys.borrow().len() > 0 => Ok(self.keys.borrow_mut().remove(0)),
+      0xDE04 => Ok(0x0000),
+      _ => Err(Error::InvalidRead(address, "Invalid read from Keyboard.")),
+    }
+  }
+
+  fn peek(&self, address: u16) -> Result<u16> {
+    match address {
+      0xDE04 if self.keys.borrow().len() > 0 => Ok(self.keys.borrow()[0]),
+      0xDE04 => Ok(0x0000),
+      _ => Err(Error::InvalidRead(address, "Invalid peek from Keyboard.")),
+    }
+  }
+
+  fn write(&mut self, address: u16, value: u16) -> Result<()> {
+    match address {
+      0xDE04 => self.mode = value,
+      _ => return Err(Error::InvalidWrite(address, "Invalid write to Keyboard.")),
+    }
+    Ok(())
   }
 }

@@ -22,7 +22,7 @@ pub enum Flag {
   InterruptFour,
   InterruptFive,
   InterruptSix,
-  InterruptMask,
+  InterruptEnable,
 }
 
 
@@ -40,19 +40,27 @@ impl Flags {
     }
   }
 
-  pub fn test(&self, negate: bool, condition: Condition) -> bool {
-    negate ^ match condition {
-      Condition::Always => true,
-      Condition::Zero => self.flags[Flag::Zero as usize],
-      Condition::Sign => self.flags[Flag::Sign as usize],
-      Condition::Carry => self.flags[Flag::Carry as usize],
-      Condition::CarryNotZero => self.flags[Flag::Carry as usize] && !self.flags[Flag::Zero as usize],
-      Condition::Overflow => self.flags[Flag::Overflow as usize],
-      Condition::OverflowNotZero => self.flags[Flag::Overflow as usize] && !self.flags[Flag::Zero as usize],
+  pub fn test(&self, c: Control) -> bool {
+    if let Some(interrupt) = c.branch.interrupt {
+      return interrupt <= 7 && self.flags[Flag::InterruptEnable as usize] && !self.flags[(interrupt as usize) + 8]
+    } else {
+      c.branch.negate ^ match c.branch.condition {
+        Condition::Always => true,
+        Condition::Zero => self.flags[Flag::Zero as usize],
+        Condition::Sign => self.flags[Flag::Sign as usize],
+        Condition::Carry => self.flags[Flag::Carry as usize],
+        Condition::CarryNotZero => self.flags[Flag::Carry as usize] && !self.flags[Flag::Zero as usize],
+        Condition::Overflow => self.flags[Flag::Overflow as usize],
+        Condition::OverflowNotZero => self.flags[Flag::Overflow as usize] && !self.flags[Flag::Zero as usize],
+      }
     }
   }
 
-  pub fn set(&mut self, flags: [bool; 8]) {
+  pub fn set(&mut self, flag: Flag, value: bool) {
+    self.flags[flag as usize] = value;
+  }
+
+  pub fn set_alu(&mut self, flags: [bool; 8]) {
     if self.control.alu.set_flags {
       for i in 0..8 {
         self.flags[i] = flags[i];

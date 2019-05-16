@@ -1,9 +1,9 @@
 
-use std::ops::{Index, IndexMut};
 use sdl2::pixels::Color;
 use sdl2::render::Canvas;
 use std::fmt;
 
+use crate::memory::Addressable;
 use crate::error::{
   Result,
   Error,
@@ -78,14 +78,6 @@ impl Screen {
     }
   }
 
-  pub fn valid(&self, address: u16) -> bool {
-    match address {
-      0xC000 ... 0xDDFF |
-      0xDE00 ... 0xDE03 => true,
-      _ => false,
-    }
-  }
-
   fn chars(&self) -> CharSet {
     match (self.mode & 0x000C) >> 2 {
       0 => CharSet::Ascii,
@@ -121,7 +113,7 @@ impl Screen {
     let (columns, rows) = self.text_size();
     for row in 0..rows {
       for col in 0..columns {
-        let character = self.data[(row * columns + col) as usize] as i32;
+        let character = (self.data[(row * columns + col) as usize] & 0x00FF) as i32;
         for y in 0..char_h {
           let line = chars.get((character * char_h + y) as usize); // TODO do bounds checking
           for x in 0..char_w {
@@ -137,31 +129,40 @@ impl Screen {
   }
 }
 
-impl Index<u16> for Screen {
-  type Output = u16;
+impl Addressable for Screen {
+  fn name(&self) -> &'static str {
+    "Screen"
+  }
 
-  fn index(&self, address: u16) -> &u16 {
+  fn valid(&self, address: u16) -> bool {
     match address {
-      0xC000 ... 0xDDFF => &self.data[(address as usize) - RAM_OFFSET],
-      0xDE00 => &self.mode,
-      0xDE01 => &self.cursor_pos[0],
-      0xDE02 => &self.cursor_pos[0],
-      0xDE03 => &self.text_start,
-      _ => panic!("Invalid address for Screen. Check Screen::valid()"),
+      0xC000 ... 0xDDFF |
+      0xDE00 ... 0xDE03 => true,
+      _ => false,
     }
   }
-}
 
-impl IndexMut<u16> for Screen {
-  fn index_mut(&mut self, address: u16) -> &mut u16 {
+  fn read(&self, address: u16) -> Result<u16> {
     match address {
-      0xC000 ... 0xDDFF => &mut self.data[(address as usize) - RAM_OFFSET],
-      0xDE00 => &mut self.mode,
-      0xDE01 => &mut self.cursor_pos[0],
-      0xDE02 => &mut self.cursor_pos[0],
-      0xDE03 => &mut self.text_start,
-      _ => panic!("Invalid address for Screen. Check Screen::valid()"),
+      0xC000 ... 0xDDFF => Ok(self.data[(address as usize) - RAM_OFFSET]),
+      0xDE00 => Ok(self.mode),
+      0xDE01 => Ok(self.cursor_pos[0]),
+      0xDE02 => Ok(self.cursor_pos[1]),
+      0xDE03 => Ok(self.text_start),
+      _ => Err(Error::InvalidRead(address, "Invalid read from Screen RAM.")),
     }
+  }
+
+  fn write(&mut self, address: u16, value: u16) -> Result<()> {
+    match address {
+      0xC000 ... 0xDDFF => self.data[(address as usize) - RAM_OFFSET] = value,
+      0xDE00 => self.mode = value,
+      0xDE01 => self.cursor_pos[0] = value,
+      0xDE02 => self.cursor_pos[1] = value,
+      0xDE03 => self.text_start = value,
+      _ => return Err(Error::InvalidWrite(address, "Invalid write to Screen RAM.")),
+    }
+    Ok(())
   }
 }
 

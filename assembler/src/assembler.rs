@@ -273,7 +273,7 @@ impl<'a> Assembler<'a> {
   }
 
   fn assemble_interrupt(&self, index: usize, halt: bool, interrupt: &Value<'a>) -> KindResult<Operation> {
-    Ok((0x0400 | (self.value(index, interrupt)?.as_interrupt()? << 6) | ((halt as u16) << 5), None))
+    Ok((0x0400 | (self.value(index, interrupt)?.as_interrupt()? << 3) | ((halt as u16) << 7), None))
   }
 
   fn assemble_op(&self, index: usize, op: &Op<'a>) -> KindResult<Operation> {

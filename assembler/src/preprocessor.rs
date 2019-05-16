@@ -2,6 +2,7 @@
 use std::io::prelude::*;
 use std::io;
 use std::fs::File;
+use std::path::Path;
 
 use super::error::{
   Result,
@@ -9,15 +10,15 @@ use super::error::{
 };
 
 
-fn read_file(file: &str) -> io::Result<String> {
+fn read_file<P: AsRef<Path>>(path: &P) -> io::Result<String> {
   let mut buffer = String::new();
-  File::open(file)?.read_to_string(&mut buffer)?;
+  File::open(path)?.read_to_string(&mut buffer)?;
   Ok(buffer)
 }
 
-fn process_file(path: &str, buffer: &mut String) -> Result<()> {
-  let file = match read_file(path) {
-    Err(error) => return Err(Error::file(String::from(path), error)),
+fn process_file<P: AsRef<Path>>(path: P, buffer: &mut String) -> Result<()> {
+  let file = match read_file(&path) {
+    Err(error) => return Err(Error::file(String::from(path.as_ref().to_string_lossy()), error)),
     Ok(file) => file,
   };
 
@@ -36,10 +37,16 @@ fn process_file(path: &str, buffer: &mut String) -> Result<()> {
         }
       },
       (_, '\n') if import && start == index =>
-        return Err(Error::invalid_filename(String::from(path), String::from(""))),
+        return Err(Error::invalid_filename(String::from(path.as_ref().to_string_lossy()), String::from(""))),
       (_, '\n') if import => {
-        process_file(&file[start..index], buffer)?;
-        import = false;
+        match path.as_ref().parent() {
+          None =>
+            return Err(Error::invalid_filename(String::from(path.as_ref().to_string_lossy()), String::from(""))),
+          Some(parent) => {
+            process_file(parent.join(&file[start..index]), buffer)?;
+            import = false;
+          },
+        }
       },
       _ if import => (),
       _ => buffer.push(c),
@@ -48,7 +55,7 @@ fn process_file(path: &str, buffer: &mut String) -> Result<()> {
   }
 
   if import {
-    Err(Error::invalid_filename(String::from(path), String::from(&file[start..])))
+    Err(Error::invalid_filename(String::from(path.as_ref().to_string_lossy()), String::from(&file[start..])))
   } else {
     Ok(())
   }

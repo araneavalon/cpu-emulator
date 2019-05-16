@@ -1,0 +1,17 @@
+#define NULL = 0
+
+#define * = 0xE000
+@./forth.a
+
+#define * = 0xF000
+@./kernel.a
+
+#define * = 0xFFF8
+#word NULL
+#word NULL
+#word NULL
+#word NULL
+#word NULL
+#word NULL
+#word NULL
+#word K_INIT

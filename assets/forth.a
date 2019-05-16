@@ -1,0 +1,1214 @@
+// FORTH Variables
+#define STATE  = 0x0000 // Interpreter state (Z -> Interpret, NZ -> Compile)
+#define LATEST = 0x0001 // Most recently defined word.
+#define HERE   = 0x0002 // Next free word of memory
+
+#define NEXT   = 0x000F // Shorter way to re-load E with NEXT when needed.
+
+// Interpreter Variables
+#define WORD_B = 0x0010 // 32 character max (0x0010-0x002F)
+
+// Constants
+#define TOS0 = 0x05FF
+#define TOS1 = 0x07FF
+#define HERE_START = 0x0800
+
+INIT:
+  LD   A,0
+  LD   (STATE),A
+  LD   A,LAST_WORD
+  LD   (LATEST),A
+  LD   A,HERE_START
+  LD   (HERE),A
+  LD   S0,TOS0
+  LD   S1,TOS1
+  LD   Z,COLD
+  LD   E,NEXT_W
+  LD   (NEXT),E
+  JMP  E
+
+COLD:
+  #word QUIT
+
+DOCOL:
+  PUT  [Z]
+  LD   Z,Y
+  INC  Z
+  JMP  E
+
+DOVAL:
+  LD   A,(Y)
+  PUTD [A]
+  JMP  E
+
+EXIT_H: // EXIT
+#word 0x0000
+#word 0x04,"EXIT"
+EXIT: #word *+1
+  POP  [Z]
+NEXT_W:
+  LD   Y,(Z)
+  INC  Z
+  JMP  (Y)
+
+LIT_H: // LIT
+#word EXIT_H
+#word 0x03,"LIT"
+LIT: #word *+1
+  LD   A,(Z)
+  PUTD [A]
+  INC  Z
+  JMP  E
+
+FALSE: // FALSE
+LIT_0: // LIT_0
+#word *+1
+  LD   A,0
+  PUTD [A]
+  JMP  E
+
+TRUE: // TRUE
+LIT_1: // LIT_1
+#word *+1
+  LD   A,1
+  PUTD [A]
+  JMP  E
+
+KEY_H: // KEY
+#word LIT_H
+#word 0x03,"KEY"
+KEY: #word *+1
+  JMP  E
+  // TODO
+
+_KEY:
+  // TODO
+
+WORD_H: // WORD
+#word KEY_H
+#word 0x04,"WORD"
+WORD: #word *+1
+  JML  _WORD
+  PUTD [A,X]
+  JMP  E
+
+//
+// _WORD [ ,YZ -> AX ]
+// A := Length of word
+// X := Pointer to start of word
+//
+_WORD:
+  PUT  [LR]
+  LD   Y,_KEY  // JML  Y is way faster than JML  (_KEY)
+1:JML  Y
+  CMP  A,'\\'
+E.JMP  (3+)    // \Comment, skip until end of line.
+  CMP  A,' '
+E.JMP  (1-)    // Space found, keep looking.
+  LD   X,WORD_B
+  LD   Z,0
+2:LD   (X+Z),A // Add characters to buffer 'till space found.
+  INC  Z
+  CMP  A,' '
+E!JMP  (2-)    // If space not found, loop.
+  LD   A,Z     // Move length to A
+  RETS
+3:JML  Y       // Skip until end of line, then keep looking.
+  CMP  A,'\n'
+E!JMP  (3-)
+  JMP  (1-)
+
+NUMBER_H: // NUMBER
+#word WORD_H
+#word 0x06,"NUMBER"
+NUMBER: #word *+1
+  POPD [A,X]
+  JML  _NUMBER
+  PUTD [A,B]
+  JMP  E
+
+//
+// _NUMBER [ AX,BCDYZ -> AB ]
+// A -> Length of string
+// X -> Pointer to start of string
+// A := Number of unparsed characters
+// B := Computed signed integer
+//
+_NUMBER:
+  PUT  [LR]
+  LD   C,A     // C:=Length
+  CMP  C,0
+E.JMP  (5+)    // Return 0 if string is length 0
+  LD   B,0     // B:=Accumulator
+  LD   Z,0     // Z:=Position in string buffer.
+  LD   D,0     // D:=Negative Flag (0=positive, 1=negative)
+  LD   A,(X+Z)
+  INC  Z
+  CMP  A,'-'   // Negative?
+E!JMP  (3+)    // Convert digit.
+  LD   D,1     // Number is negative.
+  DEC  C
+Z!JMP  (2+)    // If not "-", get next digit.
+  LD   A,1     // Error, string is "-"
+  RETS
+1:LD   A,10    // Base 10. // TODO variable base?
+  JML  K_MULTIPLY
+2:LD   A,(X+Z)
+  INC  Z
+3:SUB  A,'0'
+N.JMP  (4+)    // Is less than '0', not a number.
+  CMP  A,10
+P.JMP  (4+)    // Is greater than 9, not a number.
+  ADD  B,A     // Add digit to accumulator.
+  DEC  C
+Z!JMP  (1-)
+4:CMP  D,0
+E.JMP  (5+)    // If negative flag is 0, then skip NEG instruction.
+  NEG  B
+5:LD   A,C     // Remaining Length
+  RETS
+
+FIND_H: // FIND
+#word WORD_H
+#word 0x04,"FIND"
+FIND: #word *+1
+  POPD [A,X]
+  JML  _FIND
+  PUTD [X]    // Return pointer to found word.
+  JMP  E
+
+//
+// _FIND [ AX,BYZ -> X ]
+// A -> Length of string.
+// X -> Address of string.
+// X := Address of found word header.
+//
+_FIND:
+  PUT  [LR]
+  LD   Y,LATEST
+  LD   Z,A      // Store length of string.
+1:LD   Y,(Y)    // Get pointer to current word.
+  CMP  Y,0
+Z.JMP  (2+)     // Pointer is 0x0000, no word found.
+  INC  Y
+  LD   A,(Y)    // Length of current word.
+  SET  A,6,0    // Unset IMMEDIATE flag.
+  CMP  A,Z
+E!JMP  (1-)     // Lengths not equal, check next word.
+  INC  Y
+  JML  K_STR_CMP
+E!JMP  (1-)     // STR_CMP not equal.
+  SUB  Y,3      // Return to the start of the word header.
+2:LD   X,Y      // Get found word, and put in X.
+  RETS
+
+TCFA_H: // >CFA
+#word FIND_H
+#word 0x04,">CFA"
+TCFA: #word *+1
+  POPD [X]
+  JML  _TCFA
+  PUTD [X]
+  JMP  E
+
+_TCFA:
+  INC  X
+  ADD  X,(X) // Add length of string to pointer.
+  INC  X     // Add 1 for length byte
+  RET
+
+TDFA_H: // >DFA
+#word TCFA_H
+#word 0x04,">DFA"
+TDFA: #word DOCOL
+  #word TCFA
+  #word INC
+  #word EXIT
+
+DROP_H: // DROP
+#word TDFA_H
+#word 0x04,"DROP"
+DROP: #word *+1
+  POPD [A]
+  JMP  E
+
+SWAP_H: // SWAP
+#word DROP_H
+#word 0x04,"SWAP"
+SWAP: #word *+1
+  POPD [A,B] // ( B, A -- )
+  LD   C,A
+  PUTD [B,C] // ( -- C, B )
+  JMP  E
+
+ROT_THREE_H: // ROT3
+#word SWAP_H
+#word 0x04,"ROT3"
+ROT_THREE: #word *+1
+  POPD [A,B,C] // ( C, B, A -- )
+  LD   D,A
+  PUTD [B,C,D] // ( -- D, C, B )
+  JMP  E
+
+DUP_H: // DUP
+#word SWAP_H
+#word 0x03,"DUP"
+DUP: #word *+1
+  POPD [A]
+  PUTD [A]
+  PUTD [A]
+  JMP  E
+
+DUPZ_H: // ?DUP
+#word DUP_H
+#word 0x04,"?DUP"
+DUPZ: #word *+1
+  POPD [A]
+  PUTD [A]
+  CMP  A,0
+E.JMP  E
+  PUTD [A]
+  JMP  E
+
+INC_H: // 1+
+#word DUPZ_H
+#word 0x02,"1+"
+INC: #word *+1
+  POPD [A]
+  INC  A
+  PUTD [A]
+  JMP  E
+
+DEC_H: // 1-
+#word INC_H
+#word 0x02,"1-"
+DEC: #word *+1
+  POPD [A]
+  DEC  A
+  PUTD [A]
+  JMP  E
+
+ADD_H: // +
+#word DEC_H
+#word 0x01,"+"
+ADD: #word *+1
+  POPD [A,B]
+  ADD  A,B
+  PUTD [A]
+  JMP  E
+
+SUB_H: // -
+#word ADD_H
+#word 0x01,"-"
+SUB: #word *+1
+  POPD [A,B]
+  SUB  B,A
+  PUTD [B]
+  JMP  E
+
+MUL_H: // *
+#word SUB_H
+#word 0x01,"*"
+MUL: #word *+1
+  POPD [A,B]
+  JML  K_MULTIPLY
+  PUTD [A]
+  JMP  E
+
+DIVMOD_H: // /MOD ( Number, Divisor -- Remainder, Quotient )
+#word MUL_H
+#word 0x04,"/MOD"
+DIVMOD: #word *+1
+  POPD [A,B]
+  JML  K_DIVIDE
+  PUTD [A,B]
+  JMP  E
+
+DIV_H: // /
+#word DIVMOD_H
+#word 0x01,"/"
+DIV: #word *+1
+  POPD [A,B]
+  JML  K_DIVIDE
+  PUTD [A] // ( -- Quotient )
+  JMP  E
+
+MOD_H: // MOD
+#word DIV_H
+#word 0x03,"MOD"
+MOD: #word *+1
+  POPD [A,B]
+  JML  K_DIVIDE
+  PUTD [B] // ( -- Remainder )
+  JMP  E
+
+COMPARE:
+  POPD [A,B]
+  INC  Y
+  LD   C,0
+  JMP  Y
+t:INC  C
+f:PUTD [C]
+  JMP  E
+
+EQ_H: // =
+#word MOD_H
+#word 0x01,"="
+EQ: #word COMPARE
+  CMP  A,B
+E.JMP  (t-)
+  JMP  (f-)
+
+NEQ_H: // <>
+#word EQ_H
+#word 0x02,"<>"
+NEQ: #word COMPARE
+  CMP  A,B
+E!JMP  (t-)
+  JMP  (f-)
+
+LT_H: // <
+#word NEQ_H
+#word 0x01,"<"
+LT: #word COMPARE
+// (A-B)<0
+  CMP  B,A
+N.JMP  (t-)
+  JMP  (f-)
+
+GT_H: // >
+#word LT_H
+#word 0x01,">"
+GT: #word COMPARE
+// (B-A)<0
+  CMP  A,B
+N.JMP  (t-)
+  JMP  (f-)
+
+LTE_H: // <=
+#word GT_H
+#word 0x02,"<="
+LTE: #word COMPARE
+// (B-A)>=0
+  CMP  A,B
+P.JMP  (t-)
+  JMP  (f-)
+
+GTE_H: // >=
+#word LTE_H
+#word 0x02,">="
+GTE: #word COMPARE
+// (A-B)>=0
+  CMP  B,A
+P.JMP  (t-)
+  JMP  (f-)
+
+COMPARE_Z:
+  LD   B,0
+  POPD [A]
+  INC  Y
+  JMP  Y
+t:INC  B
+f:PUTD [B]
+  JMP  E
+
+EQZ_H: // 0=
+#word GTE_H
+#word 0x02,"0="
+EQZ: #word COMPARE_Z
+  CMP  B,A
+E.JMP  (t-)
+  JMP  (f-)
+
+NEQZ_H: // 0<>
+#word EQZ_H
+#word 0x03,"0<>"
+NEQZ: #word COMPARE_Z
+  CMP  B,A
+E!JMP  (t-)
+  JMP  (f-)
+
+LTZ_H: // 0<
+#word NEQZ_H
+#word 0x02,"0<"
+LTZ: #word COMPARE_Z
+// (A-0)<0
+  CMP  A,B
+N.JMP  (t-)
+  JMP  (f-)
+
+GTZ_H: // 0>
+#word LTZ_H
+#word 0x02,"0>"
+GTZ: #word COMPARE_Z
+// (0-A)<0
+  CMP  B,A
+N.JMP  (t-)
+  JMP  (f-)
+
+LTEZ_H: // 0<=
+#word GTZ_H
+#word 0x03,"0<="
+LTEZ: #word COMPARE_Z
+// !((0-A)<0)
+  CMP  B,A
+P.JMP  (t-)
+  JMP  (f-)
+
+GTEZ_H: // 0>=
+#word LTEZ_H
+#word 0x03,"0>="
+GTEZ: #word COMPARE_Z
+// !((A-0)<0)
+  CMP  A,B
+P.JMP  (t-)
+  JMP  (f-)
+
+AND_H: // AND
+#word GTEZ_H
+#word 0x03,"AND"
+AND: #word *+1
+  POPD [A,B]
+  AND  A,B
+  PUTD [A]
+  JMP  E
+
+OR_H: // OR
+#word AND_H
+#word 0x02,"OR"
+OR: #word *+1
+  POPD [A,B]
+  OR   A,B
+  PUTD [A]
+  JMP  E
+
+XOR_H: // XOR
+#word OR_H
+#word 0x03,"XOR"
+XOR: #word *+1
+  POPD [A,B]
+  XOR  A,B
+  PUTD [A]
+  JMP  E
+
+NOT_H: // NOT
+INVERT_H: // INVERT
+#word XOR_H
+#word 0x06,"INVERT"
+NOT:
+INVERT:
+#word *+1
+  POPD [A]
+  NOT  A
+  PUTD [A]
+  JMP  E
+
+STORE_H: // !
+#word INVERT_H
+#word 0x01,"!"
+STORE: #word *+1
+  POPD [X,Y] // ( value, address -- )
+  LD   (X),Y
+  JMP  E
+
+FETCH_H: // @
+#word STORE_H
+#word 0x01,"@"
+FETCH: #word *+1
+  POPD [X]
+  LD   A,(X)
+  PUTD [A]
+  JMP  E
+
+CMOVE_H: // CMOVE ( src, dest, len -- )
+#word FETCH_H
+#word 0x05,"CMOVE"
+CMOVE: #word *+1
+  POPD [B,X,Y]
+1:DEC  B
+C.JMP  E
+  LD   A,(Y+B)
+  LD   (X+B),A
+  CMP  B,0
+  JMP  (1-)
+
+STATE_W_H: // STATE
+#word CMOVE_H
+#word 0x05,"STATE"
+STATE_W: #word DOVAL
+  #word STATE
+
+LATEST_W_H: // LATEST
+#word STATE_W_H
+#word 0x06,"LATEST"
+LATEST_W: #word DOVAL
+  #word LATEST
+
+HERE_W_H: // HERE_W
+#word LATEST_W_H
+#word 0x04,"HERE"
+HERE_W: #word DOVAL
+  #word HERE
+
+S_TOP_H: // S0 (DATA STACK)
+#word HERE_W_H
+#word 0x02,"S0"
+S_TOP: #word DOVAL
+  #word TOS1
+
+DSP_FETCH_H: // DSP@
+#word S_TOP_H
+#word 0x04,"DSP@"
+DSP_FETCH: #word *+1
+  LD   A,S1
+  PUTD [A]
+  JMP  E
+
+DSP_STORE_H: // DSP!
+#word DSP_FETCH_H
+#word 0x04,"DSP!"
+DSP_STORE: #word *+1
+  POPD [A]
+  LD   S1,A
+  JMP  E
+
+R_TOP_H: // R0 (RETURN STACK)
+#word DSP_STORE_H
+#word 0x02,"R0"
+R_TOP: #word DOVAL
+  #word TOS0
+
+RSP_FETCH_H: // RSP@
+#word R_TOP_H
+#word 0x04,"RSP@"
+RSP_FETCH: #word *+1
+  LD   A,S0
+  PUTD [A]
+  JMP  E
+
+RSP_STORE_H: // RSP!
+#word RSP_FETCH_H
+#word 0x04,"RSP!"
+RSP_STORE: #word *+1
+  POPD [A]
+  LD   S0,A
+  JMP  E
+
+DOCOL_W_H: // DOCOL
+#word RSP_STORE_H
+#word 0x05,"DOCOL"
+DOCOL_W: #word DOVAL
+  #word DOCOL
+
+RPUSH_H: // >R
+#word DOCOL_W_H
+#word 0x02,"RPUSH"
+RPUSH: #word *+1
+  POPD [A]
+  PUT  [A]
+  JMP  E
+
+RPOP_H: // <R
+#word RPUSH_H
+#word 0x02,"RPOP"
+RPOP: #word *+1
+  POP  [A]
+  PUTD [A]
+  JMP  E
+
+RDROP_H: // RDROP
+#word RPOP_H
+#word 0x05,"RDROP"
+RDROP: #word *+1
+  POP  [A]
+  JMP  E
+
+CREATE_H: // CREATE
+#word RDROP_H
+#word 0x06,"CREATE"
+CREATE: #word *+1
+  POPD [A,X]      // Length:=A, Pointer:=X
+  LD   D,(HERE)   // Free memory.
+  LD   Y,D
+  LD   B,(LATEST)
+  LD   (Y),B      // Put link address in header.
+  INC  Y
+  LD   (Y),A      // Put length byte in header.
+  INC  Y
+  JML  K_COPY
+  LD   (LATEST),D // Set latest to start of header. (Previous (HERE))
+  LD   (HERE),Y   // Set (HERE) to next free word.
+  JMP  E
+
+COMMA_H: // ,
+#word CREATE_H
+#word 0x01,","
+COMMA: #word *+1
+  POPD [A]
+  LD   LR,E // RET -> JMP LR, therefore JMP LR -> JMP E
+_COMMA:
+  LD   X,(HERE)
+  LD   (X),A
+  INC  X
+  LD   (HERE),X
+  RET
+
+LBRACE_H: // [
+#word COMMA_H
+#word 0x41,"["
+LBRACE: #word *+1
+  LD   A,1
+  LD   (STATE),A
+  JMP  E
+
+RBRACE_H: // ]
+#word LBRACE_H
+#word 0x01,"]"
+RBRACE: #word *+1
+  LD   A,0
+  LD   (STATE),A
+  JMP  E
+
+COLON_H: // :
+#word RBRACE_H
+#word 0x01,":"
+COLON: #word DOCOL
+  #word WORD         // Get name of new word.
+  #word CREATE       // Create word header.
+  #word LIT,DOCOL
+  #word COMMA        // Append codeword.
+  #word LATEST,FETCH
+  #word HIDDEN       // Make the word hidden.
+  #word RBRACE       // Enter compile mode.
+  #word EXIT
+
+SEMICOLON_H: // ;
+#word COLON_H
+#word 0x41,";"
+SEMICOLON: #word DOCOL
+  #word LIT,EXIT
+  #word COMMA        // Append EXIT to the word.
+  #word LATEST,FETCH
+  #word HIDDEN       // Unhide the word since we're done now.
+  #word LBRACE       // Exit compile mode.
+  #word EXIT
+
+IMMEDIATE_H: // IMMEDIATE
+#word SEMICOLON_H
+#word 0x49,"IMMEDIATE"
+IMMEDIATE: #word *+1
+  LD   X,(LATEST)
+  INC  X
+  LD   A,(X)
+  XOR  A,0x40 // Toggle IMMEDIATE flag
+  LD   (X),A
+  JMP  E
+
+HIDDEN_H: // HIDDEN
+#word IMMEDIATE_H
+#word 0x06,"HIDDEN"
+HIDDEN: #word *+1
+  POPD [X]
+  INC  X
+  LD   A,(X)
+  XOR  A,0x80 // Toggle HIDDEN flag
+  LD   (X),A
+  JMP  E
+
+HIDE_H: // HIDE
+#word HIDDEN_H
+#word 0x04,"HIDE"
+HIDE: #word DOCOL
+  #word WORD
+  #word FIND
+  #word HIDDEN
+  #word EXIT
+
+TICK_H: // '
+#word HIDE_H
+#word 0x41,"'"
+TICK: #word DOCOL
+  // TODO Make faster for compiled only?
+  #word WORD
+  #word FIND
+  #word TCFA
+  #word EXIT
+
+BRANCH_H: // BRANCH
+#word TICK_H
+#word 0x06,"BRANCH"
+BRANCH: #word _BRANCH
+
+BRANCHZ_H: // 0BRANCH
+#word BRANCH_H
+#word 0x07,"0BRANCH"
+BRANCHZ: #word *+1
+  POPD [A]
+  CMP  A,0
+E.JMP  _BRANCH
+  INC  Z
+  JMP  E
+
+_BRANCH:
+  ADD  Z,(Z)
+  JMP  E
+
+NEGATE_H: // NEGATE
+#word BRANCHZ_H
+#word 0x06,"NEGATE"
+NEGATE: #word *+1
+  POPD [A]
+  NEG  A
+  PUTD [A]
+  JMP  E
+
+QUIT_H: // QUIT
+#word NEGATE_H
+#word 0x04,"QUIT"
+QUIT: #word DOCOL
+  #word R_TOP,RSP_STORE // Clear return stack.
+  #word INTERPRET    // Interpret the next word.
+  #word BRANCH,-4    // Loop INTERPRET (forever)
+
+INTERPRET_H: // INTERPRET
+#word QUIT_H
+#word 0x09,"INTERPRET"
+INTERPRET: #word *+1
+  PUT  [Z]     // Save Z
+  JML  _WORD   // X:=Pointer, A:=Length
+  PUT  [A,X]
+  JML  _FIND   // X->Pointer, A->Length => X:=Pointer|X:=0
+  CMP  X,0
+E.JMP  (1+)    // Failed to find.
+  POP  [A,B]   // Remove stored string arguments from stack.
+  LD   Z,0     // IS_LIT:=0
+  LD   Y,X
+  INC  Y
+  LD   B,(Y)   // Length & Flags
+  JML  _TCFA   // X->Word Pointer => A:=Codeword Pointer
+  LD   X,A     // Move codeword to X
+  TEST B,6     // Check immediate flag.
+Z!JMP  (5+)
+  JMP  (2+)
+1:POP  [A,X]   // Length of string, Pointer to string.
+  LD   Z,1     // IS_LIT:=1
+  JML  _NUMBER
+  CMP  B,0
+E!JMP  (3+)    // Number parse failed. TODO: Error output. (Currently ignores.)
+  LD   B,A     // Move parsed number to B.
+  LD   X,LIT   // Codeword is LIT.
+2:LD   A,(STATE)
+  CMP  A,0
+E.JMP  (4+)    // Not compiling, immediately execute.
+  LD   A,X     // Move codeword to A
+  JML  _COMMA
+  CMP  Z,0
+E.JMP  (3+)
+  LD   A,B     // If a literal, the actual value is in B
+  JML  _COMMA
+3:POP  [Z]     // Restore Z
+  JMP  E       // NEXT
+4:CMP  Z,0
+E!JMP  (5+)    // Is a literal.
+  POP  [Z]     // Restore Z
+  JMP  X       // Jump to found codeword immediately.
+5:PUTS [B]     // Put literal onto stack.
+  JMP  (3-)
+
+NL_H: // '\n'
+#word INTERPRET_H
+#word 0x04,"'\\n'"
+NL: #word DOVAL
+  #word '\n' // TODO make parser work for "\"
+
+BL_H: // BL
+#word NL_H
+#word 0x02,"BL"
+BL: #word DOVAL
+  #word ' '
+
+CR_H: // CR
+#word BL_H
+#word 0x02,"CR"
+CR: #word DOCOL
+  #word NL
+  #word EMIT
+  #word EXIT
+
+SPACE_H: // SPACE
+#word CR_H
+#word 0x05,"SPACE"
+SPACE: #word DOCOL
+  #word BL
+  #word EMIT
+  #word EXIT
+
+LITERAL_H: // LITERAL
+#word SPACE_H
+#word 0x47,"LITERAL"
+LITERAL: #word DOCOL
+  #word LIT,LIT
+  #word COMMA
+  #word COMMA
+  #word EXIT
+
+CHAR_H: // CHAR
+#word LITERAL_H
+#word 0x04,"CHAR"
+CHAR: #word *+1
+  JML  _WORD
+  LD   A,(X)
+  PUTD [A]
+  JMP  E
+
+COMPILE_H: // [COMPILE]
+#word CHAR_H
+#word 0x49,"[COMPILE]"
+COMPILE: #word DOCOL
+  #word WORD
+  #word FIND
+  #word TCFA
+  #word COMMA
+  #word EXIT
+
+RECURSE_H: // RECURSE
+#word COMPILE_H
+#word 0x47,"RECURSE"
+RECURSE: #word DOCOL
+  #word LATEST_W,FETCH
+  #word STORE
+  #word TCFA
+  #word COMMA
+  #word EXIT
+
+IF_H: // IF
+#word RECURSE_H
+#word 0x42,"IF"
+IF: #word DOCOL
+  #word LIT,BRANCHZ,COMMA // Compile 0BRANCH
+  #word HERE_W,FETCH      // Save location of the offset to the stack.
+  #word LIT_0,COMMA       // Compile dummy offset.
+  #word EXIT
+
+THEN_H: // THEN
+#word IF_H
+#word 0x44,"THEN"
+THEN: #word DOCOL
+  #word DUP
+  #word HERE_W,FETCH
+  #word SWAP,SUB          // Calculate the offset from address on the stack.
+  #word SWAP,STORE
+  #word EXIT
+
+ELSE_H: // ELSE
+#word THEN_H
+#word 0x44,"ELSE"
+ELSE: #word DOCOL
+  #word LIT,BRANCH,COMMA  // Jump to just after the false part.
+  #word HERE_W,FETCH      // Save location of the offset on the stack.
+  #word LIT_0,COMMA       // Compile a dummy offset.
+  #word SWAP              // Back-fill the original (IF) offset.
+  #word DUP
+  #word HERE_W,FETCH
+  #word SWAP,SUB          // Calculate the offset from address on the stack.
+  #word SWAP,STORE
+  #word EXIT
+
+BEGIN_H: // BEGIN
+#word ELSE_H
+#word 0x45,"BEGIN"
+BEGIN: #word DOCOL
+  #word HERE_W,FETCH
+  #word EXIT
+
+UNTIL_H: // UNTIL
+#word BEGIN_H
+#word 0x45,"UNTIL"
+UNTIL: #word DOCOL
+  #word LIT,BRANCHZ,COMMA  // Compile 0BRANCH
+  #word HERE_W,FETCH
+  #word SUB,COMMA          // Calculate and compile the offset.
+  #word EXIT
+
+AGAIN_H: // AGAIN
+#word UNTIL_H
+#word 0x45,"AGAIN"
+AGAIN: #word DOCOL
+  #word LIT,BRANCH,COMMA   // Compile BRANCH
+  #word HERE_W,FETCH
+  #word SUB,COMMA          // Calculate and compile the offset.
+  #word EXIT
+
+WHILE_H: // WHILE
+#word AGAIN_H
+#word 0x45,"WHILE"
+WHILE: #word DOCOL
+  #word LIT,BRANCHZ,COMMA
+  #word HERE_W,FETCH
+  #word LIT_0,COMMA
+  #word EXIT
+
+REPEAT_H: // REPEAT
+#word WHILE_H
+#word 0x46,"REPEAT"
+REPEAT: #word DOCOL
+  #word LIT,BRANCH,COMMA
+  #word SWAP
+  #word HERE_W,FETCH
+  #word SUB,COMMA
+  #word DUP
+  #word HERE_W,FETCH
+  #word SWAP,SUB
+  #word SWAP,STORE
+  #word EXIT
+
+UNLESS_H: // UNLESS
+#word REPEAT_H
+#word 0x46,"UNLESS"
+UNLESS: #word DOCOL
+  #word LIT,NOT,COMMA
+  #word LIT,IF,COMMA
+  #word EXIT
+
+COMMENT_H: // COMMENT
+#word UNLESS_H
+#word 0x41,"("
+COMMENT: #word DOCOL
+  #word LIT_1
+  #word BEGIN
+  #word KEY
+  #word DUP
+  #word LIT,'(',EQ,IF
+  #word DROP
+  #word INC
+  #word ELSE
+  #word LIT,')',EQ,IF
+  #word DEC
+  #word THEN
+  #word THEN
+  #word DUP,EQZ,UNTIL
+  #word DROP
+  #word EXIT
+
+PICK_H: // PICK
+#word COMMENT_H
+#word 0x04,"PICK"
+PICK: #word *+1
+  POPD [A]    // Offset
+  LD   X,SD
+  LD   B,(X+A)
+  PUTD [B]
+  JMP  E
+
+CONSTANT_H: // CONSTANT
+#word PICK_H
+#word 0x08,"CONSTANT"
+CONSTANT: #word DOCOL
+  #word WORD
+  #word CREATE
+  #word LIT,DOVAL,COMMA
+  #word LIT,LIT,COMMA
+  #word COMMA
+  #word EXIT
+
+ALLOT_H: // ALLOT
+#word CONSTANT_H
+#word 0x05,"ALLOT"
+ALLOT: #word *+1
+  POPD [A]      // Number of words to allocate.
+  LD   B,(HERE)
+  PUTD [B]      // Previous (HERE)
+  ADD  A,B
+  LD   (HERE),A // Set (HERE) to next available position.
+  JMP  E
+
+VARIABLE_H: // VARIABLE
+#word ALLOT_H
+#word 0x08,"VARIABLE"
+VARIABLE: #word DOCOL
+  #word LIT_1
+  #word ALLOT
+  #word WORD
+  #word CREATE
+  #word LIT,DOVAL
+  #word COMMA
+  #word COMMA
+  #word EXIT
+
+VALUE_H: // VALUE
+#word VARIABLE_H
+#word 0x03,"VALUE"
+VALUE: #word DOCOL
+  #word WORD
+  #word CREATE
+  #word LIT,DOVAL
+  #word COMMA
+  #word EXIT
+
+TO_H: // TO
+#word VALUE_H
+#word 0x42,"TO"
+TO: #word DOCOL
+  #word WORD
+  #word FIND
+  #word TDFA
+  #word INC
+  #word STATE_W
+  #word FETCH
+  #word IF
+  #word LIT,LIT
+  #word COMMA
+  #word COMMA
+  #word LIT,STORE
+  #word COMMA
+  #word ELSE
+  #word STORE
+  #word THEN
+  #word EXIT
+
+SPACES_H: // SPACES
+#word TO_H
+#word 0x06,"SPACES"
+SPACES: #word DOCOL
+  #word BEGIN
+  #word DUP
+  #word GTZ
+  #word WHILE
+  #word SPACE
+  #word DEC
+  #word REPEAT
+  #word DROP
+  #word EXIT
+
+UDOT_I: // No header, is not an actual word.
+#word DOCOL
+  #word LIT,10
+  #word DIVMOD
+  #word DUPZ
+  #word IF
+  #word RECURSE
+  #word THEN
+  #word LIT,'0'
+  #word ADD
+  #word EMIT
+  #word EXIT
+
+DOTS_H: // .S
+#word SPACES_H
+#word 0x02,".S"
+DOTS: #word DOCOL
+  #word DSP_FETCH
+  #word BEGIN
+  #word DUP
+  #word S_TOP
+  #word FETCH
+  #word LT
+  #word WHILE
+  #word DUP
+  #word FETCH
+  #word UDOT_I
+  #word SPACE
+  #word INC
+  #word REPEAT
+  #word DROP
+  #word EXIT
+
+UWIDTH_H: // UWIDTH
+#word DOTS_H
+#word 0x06,"UWIDTH"
+UWIDTH: #word DOCOL
+  #word LIT,10
+  #word DIV
+  #word DUPZ
+  #word IF
+  #word RECURSE
+  #word INC
+  #word ELSE
+  #word LIT_1
+  #word THEN
+  #word EXIT
+
+UDOTR_H: // U.R
+#word UWIDTH_H
+#word 0x03,"U.R"
+UDOTR: #word DOCOL
+  #word SWAP
+  #word DUP
+  #word UWIDTH
+  #word ROT_THREE
+  #word SWAP
+  #word SUB
+  #word SPACES
+  #word UDOT_I
+  #word EXIT
+
+DOTR_H: // .R
+#word UDOTR_H
+#word 0x02,".R"
+DOTR: #word DOCOL
+  #word SWAP
+  #word DUP
+  #word LTZ
+  #word IF
+  #word NEGATE
+  #word LIT_1
+  #word SWAP
+  #word ROT_THREE
+  #word DEC
+  #word ELSE
+  #word LIT_0
+  #word SWAP
+  #word ROT_THREE
+  #word THEN
+  #word SWAP
+  #word DUP
+  #word UWIDTH
+  #word ROT_THREE
+  #word SWAP
+  #word SUB
+  #word SPACES
+  #word SWAP
+  #word IF
+  #word LIT,'-'
+  #word EMIT
+  #word THEN
+  #word UDOT_I
+  #word EXIT
+
+DOT_H: // .
+#word DOTR_H
+#word 0x01,"."
+DOT: #word DOCOL
+  #word LIT_0
+  #word DOTR
+  #word SPACE
+  #word EXIT
+
+UDOT_H: // U.
+#word DOT_H
+#word 0x02,"U."
+UDOT: #word DOCOL
+  #word UDOT_I
+  #word SPACE
+  #word EXIT
+
+QUESTION_H: // ?
+#word UDOT_H
+#word 0x01,"?"
+QUESTION: #word DOCOL
+  #word FETCH
+  #word DOT
+  #word EXIT
+
+LAST_WORD:
+EMIT_H: // EMIT
+#word QUESTION_H
+#word 0x04,"EMIT"
+EMIT: #word *+1
+  POPD [A]
+  LD   LR,E
+  JMP  K_SHOW_CHAR
+
+
+
+

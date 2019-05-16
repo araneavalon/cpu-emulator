@@ -1,0 +1,110 @@
+
+// TODO actual init tasks?
+K_INIT:
+  JMP INIT
+
+//
+// MULTIPLY [ AB,C -> AB ]
+//
+K_MULTIPLY:
+  LD   C,0
+1:TEST B,0
+Z.JMP  (2+)
+  ADD  C,A
+2:SL   A
+  LSR  B
+Z!JMP  (1-)
+  LD   A,C
+  RET
+
+//
+// DIVIDE [ AB,C -> AB ]
+// A -> Number
+// B -> Divisor
+// A := Quotient
+// B := Remainder
+//
+K_DIVIDE_Z:
+  LD   C,A
+  ADD  C,B
+Z.JMP  (3+) // If either argument is 0, jump to 'failure' branch.
+K_DIVIDE:
+  LD   C,0
+1:SUB  A,B
+C.JMP  (2+)
+  INC  C
+  JMP  (1-)
+2:ADD  B,A  // At this point, B=Divisor, and A=Remainder-B, so B+(Remainder-B)=Remainder
+  LD   A,C  // Put Quotient into A
+  RET
+3:LD   A,0  // Divided by 0, or divided 0, return both values as 0
+  LD   B,0
+  RET
+
+//
+// STR_CMP [AXY,AB -> Zf]
+// A -> Length
+// X -> String 1
+// Y -> String 2
+// CALL (K_STR_CMP)
+// Z!JMP  (FAIL)  // Z! -> Not Equal
+//
+K_STR_CMP:
+  CMP  A,0
+E.RET
+  DEC  A
+1:LD   B,(X+A)
+  CMP  B,(Y+A)
+E!RET
+  DEC  A
+C!JMP  (1-)
+  RET
+
+//
+// COPY [ AXY,AB -> ]
+// A -> Length
+// X -> Source
+// Y -> Dest
+//
+K_COPY:
+  CMP  A,0
+E.RET
+  DEC  A
+1:LD   B,(X+A)
+  LD   (Y+A),B
+  DEC  A
+C!JMP  (1-)
+  RET
+
+
+#define V_TEXT_TOP = 0x0FFF // TODO figure out where the vram is actually mapped.
+#define V_TEXT = 0x0030 // TODO Properly map kernel variables and stuff?
+
+//
+// SHOW_CHARS [ AX,ABY -> ]
+// A -> Length
+// X -> Source Address
+//
+K_SHOW_CHARS:
+  LD   Y,(V_TEXT)
+  LD   B,A
+  ADD  B,Y
+  LD   (V_TEXT),B
+  JMP  K_COPY
+
+//
+// SHOW_CHAR [ A,Y -> ]
+// A -> Character
+//
+K_SHOW_CHAR:
+  LD   Y,(V_TEXT)
+  LD   (Y),A
+  INC  Y
+  LD   (V_TEXT),Y
+  RET
+
+// KEY_INTERRUPT
+KEY_INT:
+// TODO
+
+

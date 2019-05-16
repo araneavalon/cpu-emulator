@@ -13,7 +13,10 @@ use super::components::{
   StackPointers,
 };
 use super::memory::Memory;
-use super::io::Screen;
+use super::io::{
+  Screen,
+  Keyboard,
+};
 use super::control::{
   ControlLogic,
   Control,
@@ -86,7 +89,7 @@ impl Cpu {
     Ok(())
   }
 
-  fn data(&self) -> Result<Option<u16>> {
+  fn data(&mut self) -> Result<Option<u16>> {
     let mut out = None;
     for component in self.components() {
       match (out, component.data()?) {
@@ -120,7 +123,7 @@ impl Cpu {
   }
 
   pub fn half_cycle(&mut self) -> Result<bool> {
-    let c = self.control.decode(self.i.get(), &self.flags)?;
+    let c = self.control.decode(self.i.get(), &self.flags, &mut self.i)?;
     self.set_control(c);
     self.memory.set_address(self.address()?);
     self.lr.link(self.pc.link());
@@ -128,13 +131,22 @@ impl Cpu {
   }
 
   pub fn cycle(&mut self) -> Result<()> {
-    self.load(self.data()?)?;
-    self.flags.set(self.alu.get_flags());
+    let data = self.data()?;
+    self.load(data)?;
+    self.flags.set_alu(self.alu.get_flags());
     Ok(())
   }
 
   pub fn screen(&self) -> Result<&Screen> {
     self.memory.screen()
+  }
+
+  pub fn keyboard(&mut self) -> Result<&mut Keyboard> {
+    self.memory.keyboard()
+  }
+
+  pub fn interrupt(&mut self, interrupt: u16) -> Result<()> {
+    self.control.interrupt(interrupt)
   }
 }
 

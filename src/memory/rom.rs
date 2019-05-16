@@ -1,6 +1,10 @@
 
-use std::ops::Index;
 use std::fmt;
+use super::Addressable;
+use crate::error::{
+  Result,
+  Error,
+};
 
 
 const ROM_SIZE: usize   = 0x2000;
@@ -18,21 +22,23 @@ impl Rom {
     }
     Rom { data }
   }
+}
 
-  pub fn name(&self) -> &'static str {
+impl Addressable for Rom {
+  fn name(&self) -> &'static str {
     "ROM"
   }
 
-  pub fn valid(&self, address: u16) -> bool {
+  fn valid(&self, address: u16) -> bool {
     (ROM_OFFSET <= (address as usize)) && ((address as usize) < (ROM_SIZE + ROM_OFFSET))
   }
-}
 
-impl Index<u16> for Rom {
-  type Output = u16;
+  fn read(&self, address: u16) -> Result<u16> {
+    Ok(self.data[(address as usize) - ROM_OFFSET])
+  }
 
-  fn index(&self, address: u16) -> &u16 {
-    &self.data[(address as usize) - ROM_OFFSET]
+  fn write(&mut self, address: u16, _: u16) -> Result<()> {
+    Err(Error::InvalidWrite(address, "Unable to write ROM."))
   }
 }
 

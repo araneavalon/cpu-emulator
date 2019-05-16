@@ -107,6 +107,7 @@ pub enum Condition {
 pub struct Branch {
   pub negate: bool,
   pub condition: Condition,
+  pub interrupt: Option<u16>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -124,7 +125,6 @@ pub struct Control {
   pub branch: Branch,
   pub link: bool,
   pub stack_sequence: bool,
-  pub interrupt: bool,
   pub halt: bool,
 }
 
@@ -157,10 +157,9 @@ impl Control {
       a: LoadRegister { load: false },
       i: InstructionRegister { load: false, mode: IMode::None },
       memory: Bidirectional { load: false, out: false },
-      branch: Branch { negate: false, condition: Condition::Always },
+      branch: Branch { negate: false, condition: Condition::Always, interrupt: None },
       link: false,
       stack_sequence: false,
-      interrupt: false,
       halt: false,
     }
   }

@@ -176,8 +176,8 @@ impl Direction {
       Direction::Const => default,
       Direction::Near => default ^ ((op & 0x0400) == 0),
       Direction::Far => default ^ ((op & 0x0800) == 0),
-      Direction::Pop => (op & 0x0800) != 0,
-      Direction::Put => (op & 0x0800) == 0,
+      Direction::Pop => (op & 0x0800) == 0,
+      Direction::Put => (op & 0x0800) != 0,
     }
   }
 }
@@ -309,7 +309,6 @@ pub struct Microcode {
 
   s_count: Option<Direction>,
 
-  interrupt: bool,
   halt: bool,
 }
 
@@ -330,12 +329,11 @@ impl Microcode {
 
       s_count: None,
 
-      interrupt: false,
       halt: false,
     }
   }
 
-  pub fn decode(&self, op: u16, branch: Option<u16>) -> Result<Control> {
+  pub fn decode(&self, op: u16, branch: Option<(bool, u16)>) -> Result<Control> {
     let mut c = Control::new();
 
     self.address.decode(op, &mut c);
@@ -346,7 +344,7 @@ impl Microcode {
     self.alu_mode.decode(op, &mut c)?;
     c.alu.set_flags = self.set_flags;
 
-    if let Some(mask) = branch {
+    if let Some((false, mask)) = branch {
       c.branch.negate = (op & 0x0800) != 0;
       c.branch.condition = match op & 0x0007 {
         0 => control::Condition::Always,
@@ -363,6 +361,8 @@ impl Microcode {
       if c.link && self.pc_increment {
         c.lr.increment = true;
       }
+    } else if let Some((true, _)) = branch {
+      c.branch.interrupt = Some((op & 0x0038) >> 3);
     }
 
     if self.pc_increment && !c.pc.load {
@@ -373,8 +373,6 @@ impl Microcode {
       c.s[((op & 0x0200) != 0) as usize].count = true;
       c.s[((op & 0x0200) != 0) as usize].direction = direction.parse(op, true);
     }
-
-    c.interrupt = self.interrupt;
 
     if self.halt {
       c.halt = (op & 0x0080) != 0;
@@ -772,30 +770,30 @@ pub fn array() -> MicrocodeArray {
       let mut m = Microcode::new();
       m.data = [
         (DataSelect::Interrupt, Direction::Const),
-        (DataSelect::ProgramCounter, Direction::Const),
-      ];
-      m.halt = true;
-      m
-    },
-    { // 43 NOP
-      let mut m = Microcode::new();
-      m.halt = true;
-      m
-    },
-    { // 44 INIT
-      let mut m = Microcode::new();
-      m.data = [
-        (DataSelect::Startup, Direction::Const),
         (DataSelect::A, Direction::Const),
       ];
+      m.halt = true;
       m
     },
-    { // 45 INIT
+    { // 43 INT / INIT
       let mut m = Microcode::new();
       m.address = AddressSelect::A;
       m.data = [
         (DataSelect::Memory, Direction::Const),
         (DataSelect::ProgramCounter, Direction::Const),
+      ];
+      m
+    },
+    { // 44 NOP
+      let mut m = Microcode::new();
+      m.halt = true;
+      m
+    },
+    { // 45 INIT
+      let mut m = Microcode::new();
+      m.data = [
+        (DataSelect::Startup, Direction::Const),
+        (DataSelect::A, Direction::Const),
       ];
       m
     },

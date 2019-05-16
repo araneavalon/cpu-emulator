@@ -1,6 +1,7 @@
 
 extern crate assembler;
 extern crate sdl2;
+extern crate backtrace;
 
 mod error;
 mod components;
@@ -38,6 +39,8 @@ const WIDTH:  u32 = 240;
 const HEIGHT: u32 = 128;
 const BORDER: i32 = 1;
 const SCALE:  f32 = 4.0;
+
+const KB_INT: u16 = 6;
 
 
 fn load_rom(filename: &str) -> std::io::Result<Vec<u16>> {
@@ -102,6 +105,12 @@ fn run(cpu: &mut Cpu) -> Result<()> {
         Event::Quit { .. } |
         Event::KeyDown { keycode: Some(Keycode::ScrollLock), .. } => break 'running,
         Event::KeyDown { keycode: Some(Keycode::Pause), .. } => halt = !halt,
+        Event::KeyDown { keycode: Some(key), keymod, .. } => {
+          if cpu.keyboard()?.pressed(key, keymod) {
+            println!("Keyboard Interrupt: {}, {:?}, {:?}", KB_INT, key, keymod);
+            cpu.interrupt(KB_INT)?;
+          }
+        },
         _ => (),
       }
     }

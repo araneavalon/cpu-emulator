@@ -1,0 +1,30 @@
+
+#define * = 0xE000
+
+INIT:
+  LD  X,0xC000
+  JML SHOW
+  HLT
+  LD  A,(0xDE00)
+  SET A,3,1       // Switch Character Set
+  LD  (0xDE00),A
+  HLT
+  SET A,7,1       // Change Character Size
+  LD  (0xDE00),A
+  HLT
+
+SHOW:
+  LD  Y,STR
+  LD  C,0
+1:LD  A,(Y+C)
+  CMP A,0
+E.RET
+  LD  (X+C),A
+  ADD C,1
+  JMP (1-)
+
+STR:
+  #word "Hello World!",0x0000
+
+#define * = 0xFFFF
+#word INIT

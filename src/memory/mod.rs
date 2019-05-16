@@ -1,5 +1,4 @@
 
-use std::ops::{Index, IndexMut};
 use std::fmt;
 
 use crate::control::Control;
@@ -7,6 +6,7 @@ use crate::components::BusComponent;
 use crate::io::{
   Io,
   Screen,
+  Keyboard,
 };
 use crate::error::{
   Result,
@@ -15,9 +15,12 @@ use crate::error::{
 
 mod ram;
 mod rom;
+mod addressable;
 
 use ram::Ram;
 use rom::Rom;
+
+pub use addressable::Addressable;
 
 
 // 8k IO/VRAM
@@ -82,7 +85,11 @@ impl Memory {
     self.io.screen()
   }
 
-  fn component(&self, address: u16) -> Result<&dyn Index<u16, Output = u16>> {
+  pub fn keyboard(&mut self) -> Result<&mut Keyboard> {
+    self.io.keyboard()
+  }
+
+  fn component(&self, address: u16) -> Result<&dyn Addressable> {
     if self.ram.valid(address) {
       Ok(&self.ram)
     } else if self.rom.valid(address) {
@@ -94,27 +101,15 @@ impl Memory {
     }
   }
 
-  fn component_mut(&mut self, address: u16) -> Result<&mut dyn IndexMut<u16, Output = u16>> {
+  fn component_mut(&mut self, address: u16) -> Result<&mut dyn Addressable> {
     if self.ram.valid(address) {
       Ok(&mut self.ram)
     } else if self.rom.valid(address) {
-      Err(Error::InvalidWrite(address, "Can not write to ROM."))
+      Ok(&mut self.rom)
     } else if self.io.valid(address) {
       Ok(&mut self.io)
     } else {
-      Err(Error::InvalidWrite(address, "No component available at address. This should be Impossible."))
-    }
-  }
-
-  fn name(&self, address: u16) -> Result<&'static str> {
-    if self.ram.valid(address) {
-      Ok(self.ram.name())
-    } else if self.rom.valid(address) {
-      Ok(self.rom.name())
-    } else if self.io.valid(address) {
-      Ok(self.io.name())
-    } else {
-      Err(Error::Impossible(address, "No component available at address. This should be Impossible."))
+      Err(Error::InvalidRead(address, "No component available at address. This should be Impossible."))
     }
   }
 }
@@ -131,17 +126,16 @@ impl BusComponent for Memory {
   fn load(&mut self, value: u16) -> Result<()> {
     if self.control.memory.load {
       let address = self.address;
-      print!("Memory Write: {}:={}", self.name(address)?, value);
-      self.component_mut(address)?[address] = value;
-      println!(" => {}", self.component(address)?[address]);
+      self.component_mut(address)?.write(address, value)
+    } else {
+      Ok(())
     }
-    Ok(())
   }
 
   fn data(&self) -> Result<Option<u16>> {
     if self.control.memory.out {
       let address = self.address;
-      Ok(Some(self.component(address)?[address]))
+      Ok(Some(self.component(address)?.read(address)?))
     } else {
       Ok(None)
     }
@@ -160,8 +154,8 @@ impl fmt::Display for Memory {
       write!(f, " MEM ==")?;
     }
     let address = self.address;
-    let value = self.component(address)?[address];
-    write!(f, " 0x{:04X} <- {}[0x{:04X}]", value, self.name(address)?, address)?;
+    let component = self.component(address)?;
+    write!(f, " 0x{:04X} <- {}[0x{:04X}]", component.peek(address)?, component.name(), address)?;
     Ok(())
   }
 }

@@ -25,6 +25,10 @@ impl InstructionRegister {
   pub fn get(&self) -> u16 {
     self.value
   }
+
+  pub fn set(&mut self, value: u16) {
+    self.value = value;
+  }
 }
 
 impl fmt::Display for InstructionRegister {

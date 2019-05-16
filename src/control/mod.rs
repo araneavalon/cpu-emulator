@@ -6,6 +6,7 @@ mod control;
 use std::fmt;
 use crate::error::{Error, Result};
 use super::components::Flags;
+use super::components::InstructionRegister;
 use self::microcode::MicrocodeArray;
 use self::instructions::{
   Instructions,
@@ -27,6 +28,7 @@ pub struct ControlLogic {
   instructions: Instructions,
   previous: Control,
   state: State,
+  interrupt: Option<u16>,
   cycle: usize,
   fetch: usize,
 }
@@ -39,13 +41,23 @@ impl ControlLogic {
       instructions: Instructions::new(&microcode)?,
       previous: Control::new(),
       state: State::Init,
+      interrupt: None,
       cycle: 0,
       fetch: 0,
     })
   }
 
-  pub fn decode(&mut self, op: u16, flags: &Flags) -> Result<Control> {
-    match self.state {
+  pub fn interrupt(&mut self, interrupt: u16) -> Result<()> {
+    if interrupt > 7 {
+      Err(Error::InvalidInterrupt(interrupt))
+    } else {
+      self.interrupt = Some(interrupt);
+      Ok(())
+    }
+  }
+
+  pub fn decode(&mut self, op: u16, flags: &Flags, ir: &mut InstructionRegister) -> Result<Control> {
+    match &mut self.state {
       State::Fetch => {
         let instruction = self.instructions.decode(&self.microcode, op)?;
         self.state = State::Run(instruction);
@@ -53,7 +65,16 @@ impl ControlLogic {
       State::Init => {
         self.state = State::Run(self.instructions.init());
       },
-      State::Run(_) => (),
+      State::Run(instruction) => {
+        if let None = instruction.peek() {
+          if let Some(i) = self.interrupt {
+            let (op, instruction) = self.instructions.interrupt(&self.microcode, i)?;
+            self.interrupt = None;
+            ir.set(op); // TODO make this closer to how it'd actually function?
+            self.state = State::Run(instruction);
+          }
+        }
+      },
     }
 
     let c = match &mut self.state {
@@ -61,7 +82,7 @@ impl ControlLogic {
       State::Init => return Err(Error::Impossible(op, "It should be literally impossible for ControlLogic.state to be Init.")),
       State::Run(instruction) => {
         match instruction.next() {
-          Some(c) if flags.test(c.branch.negate, c.branch.condition) => c,
+          Some(c) if flags.test(c) => c,
           _ => {
             self.state = State::Fetch;
             self.fetch += 1;
