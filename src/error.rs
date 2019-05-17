@@ -21,7 +21,12 @@ pub enum Error {
   InvalidWrite(u16, &'static str),
   InvalidInterrupt(u16),
   Impossible(u16, &'static str),
+  ParseFloatError(std::num::ParseFloatError),
+  Sdl2StringError(String),
+  Sdl2WindowError(sdl2::video::WindowBuildError),
+  Sdl2IntegerError(sdl2::IntegerOrSdlError),
   File(String, io::Error),
+  Assembler(String, assembler::Error),
   InvalidROM,
 }
 
@@ -56,11 +61,39 @@ impl fmt::Display for Error {
         write!(f, "InvalidInterrupt({}): Hardware Interrupts must be in the range [0,7].", interrupt),
       Error::Impossible(op, message) =>
         write!(f, "Impossible(0x{:04X}): {}", op, message),
+      Error::ParseFloatError(error) =>
+        write!(f, "ParseFloatError: {}", error),
+      Error::Sdl2StringError(error) =>
+        write!(f, "Sdl2: {}", error),
+      Error::Sdl2WindowError(error) =>
+        write!(f, "Sdl2: {}", error),
+      Error::Sdl2IntegerError(error) =>
+        write!(f, "Sdl2: {}", error),
       Error::File(path, error) =>
         write!(f, "File({}): {}", path, error),
+      Error::Assembler(path, error) =>
+        write!(f, "Assembler({}): {}", path, error),
       Error::InvalidROM =>
         write!(f, "InvalidROM: No ROM file provided."),
     }
+  }
+}
+
+impl From<std::num::ParseFloatError> for Error {
+  fn from(error: std::num::ParseFloatError) -> Error {
+    Error::ParseFloatError(error)
+  }
+}
+
+impl From<sdl2::video::WindowBuildError> for Error {
+  fn from(error: sdl2::video::WindowBuildError) -> Error {
+    Error::Sdl2WindowError(error)
+  }
+}
+
+impl From<sdl2::IntegerOrSdlError> for Error {
+  fn from(error: sdl2::IntegerOrSdlError) -> Error {
+    Error::Sdl2IntegerError(error)
   }
 }
 
@@ -68,4 +101,32 @@ impl From<Error> for fmt::Error {
   fn from(_: Error) -> fmt::Error {
     fmt::Error
   }
+}
+
+#[macro_export]
+macro_rules! sdl_e {
+  (__String, $e:expr ) => {
+    match $e {
+      Err(message) => Err(Error::Sdl2StringError(message)),
+      Ok(value) => Ok(value),
+    }
+  };
+  ( sdl2::init() ) => {
+    sdl_e!(__String, sdl2::init())
+  };
+  ( $e:ident.video() ) => {
+    sdl_e!(__String, $e.video())
+  };
+  ( $e:ident.event_pump() ) => {
+    sdl_e!(__String, $e.event_pump())
+  };
+  ( $e:ident.set_scale($h:expr, $v:expr) ) => {
+    sdl_e!(__String, $e.set_scale($h, $v))
+  };
+  ( $e:ident.draw_point(($x:expr, $y:expr)) ) => {
+    sdl_e!(__String, $e.draw_point(($x, $y)))
+  };
+  ( $e:expr ) => {
+    $e
+  };
 }

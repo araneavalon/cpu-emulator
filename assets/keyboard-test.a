@@ -1,20 +1,33 @@
 
 @./init.a
-1:LD   A,'.'
-  LD   (X),A
-  ADD  X,1
+  LD   X,0xC000
+1:NOP
   JMP  (1-)
 
+  NOP
 KB_INT:
   SET  F,15,0     // Disable Interrupts
 1:LD   A,(0xDE04)
   TEST A,11
 Z.JMP  (2+)
+  AND  A,0x00FF
+  CMP  A,0x007F // Delete
+E.JMP  (d+)
+  CMP  A,0x0008 // Backspace
+E.JMP  (d+)
+  CMP  A,0x000A
+E.JMP  (n+)
   LD   (X),A
   ADD  X,1
   JMP  (1-)
 2:SET  F,15,1
   RET0
+d:SUB  X,1
+  LD   A,0x0000
+  LD   (X),A
+  JMP  (1-)
+n:LD   X,0xC027
+  JMP  (1-)
 
 #define * = 0xFFFE
 #word KB_INT

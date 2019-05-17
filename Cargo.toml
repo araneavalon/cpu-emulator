@@ -7,4 +7,4 @@ edition = "2018"
 [dependencies]
 assembler = { path = "assembler" }
 sdl2 = "0.32.1"
-backtrace = "0.3"
+clap = "2.33.0"

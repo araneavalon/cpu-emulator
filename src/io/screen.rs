@@ -105,7 +105,7 @@ impl Screen {
     }
   }
 
-  pub fn draw<T: sdl2::render::RenderTarget>(&self, canvas: &mut Canvas<T>, bg: Color, fg: Color) -> Result<()> {
+  pub fn draw<T: sdl2::render::RenderTarget>(&self, canvas: &mut Canvas<T>, _bg: Color, fg: Color) -> Result<()> {
     canvas.set_draw_color(fg);
 
     let chars = self.chars();
@@ -115,10 +115,10 @@ impl Screen {
       for col in 0..columns {
         let character = (self.data[(row * columns + col) as usize] & 0x00FF) as i32;
         for y in 0..char_h {
-          let line = chars.get((character * char_h + y) as usize); // TODO do bounds checking
+          let line = chars.get((character * char_h + y) as usize);
           for x in 0..char_w {
             if ((line >> (char_w - x - 1)) & 1) != 0 {
-              canvas.draw_point(((col * char_w) + x, (row * char_h) + y)).unwrap(); // TODO ERROR
+              sdl_e!(canvas.draw_point(((col * char_w) + x, (row * char_h) + y)))?;
             }
           }
         }

@@ -1,6 +1,11 @@
 
 use std::fmt;
-use crate::error::{Error, Result};
+use std::time::Duration;
+use std::thread;
+use crate::error::{
+  Result,
+  Error,
+};
 use super::components::{
   BusComponent,
   AddressRegister,
@@ -25,6 +30,11 @@ use super::control::{
 
 #[derive(Debug)]
 pub struct Cpu {
+  hz: f64,
+  clock: Duration,
+  halt: bool,
+  c: Control,
+
   control: ControlLogic,
 
   a: AddressRegister,
@@ -36,13 +46,16 @@ pub struct Cpu {
   pc: ProgramCounter,
   r: RegisterFile,
   s: StackPointers,
-
-  c: Control,
 }
 
 impl Cpu {
-  pub fn new(rom: Vec<u16>) -> Result<Cpu> {
+  pub fn new(hz: f64, rom: Vec<u16>) -> Result<Cpu> {
     Ok(Cpu {
+      hz: hz,
+      clock: Duration::from_nanos((1_000_000_000.0 / (hz * 2.0)) as u64),
+      halt: false,
+      c: Control::new(),
+
       control: ControlLogic::new()?,
 
       a: AddressRegister::new(),
@@ -54,8 +67,6 @@ impl Cpu {
       pc: ProgramCounter::new(),
       r: RegisterFile::new(),
       s: StackPointers::new(),
-
-      c: Control::new(),
     })
   }
 
@@ -122,19 +133,49 @@ impl Cpu {
     }
   }
 
-  pub fn half_cycle(&mut self) -> Result<bool> {
+  fn half_cycle(&mut self) -> Result<()> {
     let c = self.control.decode(self.i.get(), &self.flags, &mut self.i)?;
     self.set_control(c);
     self.memory.set_address(self.address()?);
     self.lr.link(self.pc.link());
-    Ok(c.halt)
+    Ok(())
   }
 
-  pub fn cycle(&mut self) -> Result<()> {
+  fn cycle(&mut self) -> Result<()> {
     let data = self.data()?;
     self.load(data)?;
     self.flags.set_alu(self.alu.get_flags());
     Ok(())
+  }
+
+  pub fn hz(&self) -> f64 {
+    self.hz
+  }
+
+  pub fn run(&mut self, cycles: u32) -> Result<()> {
+    if !self.halt {
+      for cycle in 0..cycles {
+        thread::sleep(self.clock);
+        self.half_cycle()?;
+
+        thread::sleep(self.clock);
+        self.cycle()?;
+
+        if self.c.halt {
+          self.halt = true;
+          thread::sleep(self.clock * (cycles - cycle - 1) * 2);
+          break;
+        }
+      }
+      Ok(())
+    } else {
+      thread::sleep(self.clock * cycles * 2);
+      Ok(())
+    }
+  }
+
+  pub fn pause(&mut self) {
+    self.halt = !self.halt;
   }
 
   pub fn screen(&self) -> Result<&Screen> {

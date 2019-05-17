@@ -4,7 +4,6 @@
 
 #define * = 0xE000
 INIT:
-  LD   X,0xC000
   LD   S0,TOS0
   LD   S1,TOS1
   SET  F,15,1
